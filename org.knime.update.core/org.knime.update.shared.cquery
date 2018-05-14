@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?><cq:componentQuery xmlns:cq="http://www.eclipse.org/buckminster/CQuery-1.0" resourceMap="core.rmap">
+    <cq:rootRequest name="org.knime.update.core" componentType="eclipse.feature" versionDesignator="2.4.0"/>
+    <cq:property key="buckminster.download.source" value="true"/>
+    <cq:property key="target.arch" value="*"/>
+    <cq:property key="target.os" value="*"/>
+    <cq:property key="target.ws" value="*"/>
+</cq:componentQuery>
