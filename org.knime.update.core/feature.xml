@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <feature
       id="org.knime.update.core"
-      label="KNIME Shared Update Site"
+      label="KNIME Core Update Site"
       version="3.6.0.qualifier"
       provider-name="KNIME AG, Zurich, Switzerland">
 
    <includes
-         id="org.knime.core"
+         id="org.knime.features.base"
          version="0.0.0"/>
 
 </feature>
