@@ -1,19 +1,49 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <rm:rmap xmlns:bc="http://www.eclipse.org/buckminster/Common-1.0" xmlns:rm="http://www.eclipse.org/buckminster/RMap-1.0">
+  <rm:locator pattern="^org\.knime\.expressions\.core(\..+)?" searchPathRef="knime-expressions" />
+  <rm:locator pattern="^org\.knime\.ext\.svg(\..+)?" searchPathRef="knime-svg" />
+  <rm:locator pattern="^org\.knime\.workbench\.explorer\.view(\..+)?" searchPathRef="knime-explorer" />
+  <rm:locator pattern="^org\.knime\.js\.core(\..+)?" searchPathRef="knime-js" />
+  <rm:locator pattern="^org\.knime\.ext\.phantomjs(\..+)?" searchPathRef="knime-js" />
+  <rm:locator pattern="^org\.knime\.core\.util(\..+)?" searchPathRef="knime-shared" />
+  <rm:locator pattern="^org\.apache\.xmlbeans" searchPathRef="knime-shared" />
+  <rm:locator pattern="^org\.knime\.distmatrix" searchPathRef="knime-distance" />
+  <rm:locator pattern="^org\.knime\.ensembles" searchPathRef="knime-ensembles" />
   <rm:locator pattern="^org\.knime\.build\.config" searchPathRef="knime-jenkins" />
-  <rm:locator pattern="^org\.knime\..*base(\..+)?" searchPathRef="knime-core" />
-  <rm:locator pattern="^org\.knime\..*core(\..+)?" searchPathRef="knime-core" />
-  <rm:locator pattern="^org\.knime\..*deprecated(\..+)?" searchPathRef="knime-core" />
-  <rm:locator pattern="^org\.knime\..*ext(\..+)?" searchPathRef="knime-core" />
-  <rm:locator pattern="^org\.knime\..*features(\..+)?" searchPathRef="knime-core" />
-  <rm:locator pattern="^org\.knime\..*jsnippets(\..+)?" searchPathRef="knime-core" />
-  <rm:locator pattern="^org\.knime\..*product(\..+)?" searchPathRef="knime-core" />
-  <rm:locator pattern="^org\.knime\..*startup(\..+)?" searchPathRef="knime-core" />
-  <rm:locator pattern="^org\.knime\..*stats(\..+)?" searchPathRef="knime-core" />
-  <rm:locator pattern="^org\.knime\..*time(\..+)?" searchPathRef="knime-core" />
-  <rm:locator pattern="^org\.knime\..*timeseries(\..+)?" searchPathRef="knime-core" />
-  <rm:locator pattern="^org\.knime\..*update(\..+)?" searchPathRef="knime-core" />
-  <rm:locator pattern="^org\.knime\..*workbench(\..+)?" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.config" searchPathRef="knime-config"/>
+  <rm:locator pattern="^org\.knime\.base" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.base\.treeensembles" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.base\.treeensembles2" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.base\.treeensembles2\.testing" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.core" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.core\.data\.uritype" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.core\.pmml" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.core\.testing" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.core\.ui" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.core\.wizard" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.deprecated" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.ext\.sun" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.features\.base" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.jsnippets" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.jsnippets\.testing" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.product" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.product\.desktop" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.product\.testing" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.startup" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.stats" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.time" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.timeseries" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.update\.core" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.workbench?" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.workbench\.core" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.workbench\.editor" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.workbench\.help" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.workbench\.repository" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.workbench\.repository\.testing" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.workbench\.ui" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.workbench\.ui\.browser" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.workbench\.ui\.layout" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\.workbench\.workflowcoach" searchPathRef="knime-core" />
   <rm:locator searchPathRef="external-bundles" failOnError="false"/>
   <rm:locator searchPathRef="local-mirror" failOnError="false"/>
   <rm:locator searchPathRef="local-tp"/>
@@ -36,6 +66,78 @@
       </rm:uri>
     </rm:provider>
   </rm:searchPath>
+  <rm:searchPath name="knime-config">
+    <rm:provider componentTypes="osgi.bundle,eclipse.feature" readerType="git" mutable="false">
+      <rm:property key="buckminster.mutable" value="false"/>
+      <rm:uri format="{0}/git/knime-config,{1}">
+        <bc:propertyRef key="workspace.root"/>
+        <bc:propertyRef key="buckminster.component"/>
+      </rm:uri>
+    </rm:provider>
+  </rm:searchPath>
+  <rm:searchPath name="knime-expressions">
+    <rm:provider componentTypes="osgi.bundle,eclipse.feature" readerType="git" mutable="false">
+      <rm:property key="buckminster.mutable" value="false"/>
+      <rm:uri format="{0}/git/knime-expressions,{1}">
+        <bc:propertyRef key="workspace.root"/>
+        <bc:propertyRef key="buckminster.component"/>
+      </rm:uri>
+    </rm:provider>
+  </rm:searchPath>
+  <rm:searchPath name="knime-svg">
+    <rm:provider componentTypes="osgi.bundle,eclipse.feature" readerType="git" mutable="false">
+      <rm:property key="buckminster.mutable" value="false"/>
+      <rm:uri format="{0}/git/knime-svg,{1}">
+        <bc:propertyRef key="workspace.root"/>
+        <bc:propertyRef key="buckminster.component"/>
+      </rm:uri>
+    </rm:provider>
+  </rm:searchPath>
+  <rm:searchPath name="knime-explorer">
+    <rm:provider componentTypes="osgi.bundle,eclipse.feature" readerType="git" mutable="false">
+      <rm:property key="buckminster.mutable" value="false"/>
+      <rm:uri format="{0}/git/knime-explorer,{1}">
+        <bc:propertyRef key="workspace.root"/>
+        <bc:propertyRef key="buckminster.component"/>
+      </rm:uri>
+    </rm:provider>
+  </rm:searchPath>
+  <rm:searchPath name="knime-js">
+    <rm:provider componentTypes="osgi.bundle,eclipse.feature" readerType="git" mutable="false">
+      <rm:property key="buckminster.mutable" value="false"/>
+      <rm:uri format="{0}/git/knime-js,{1}">
+        <bc:propertyRef key="workspace.root"/>
+        <bc:propertyRef key="buckminster.component"/>
+      </rm:uri>
+    </rm:provider>
+  </rm:searchPath>
+  <rm:searchPath name="knime-shared">
+    <rm:provider componentTypes="osgi.bundle,eclipse.feature" readerType="git" mutable="false">
+      <rm:property key="buckminster.mutable" value="false"/>
+      <rm:uri format="{0}/git/knime-shared,{1}">
+        <bc:propertyRef key="workspace.root"/>
+        <bc:propertyRef key="buckminster.component"/>
+      </rm:uri>
+    </rm:provider>
+  </rm:searchPath>
+  <rm:searchPath name="knime-distance">
+    <rm:provider componentTypes="osgi.bundle,eclipse.feature" readerType="git" mutable="false">
+      <rm:property key="buckminster.mutable" value="false"/>
+      <rm:uri format="{0}/git/knime-distance,{1}">
+        <bc:propertyRef key="workspace.root"/>
+        <bc:propertyRef key="buckminster.component"/>
+      </rm:uri>
+    </rm:provider>
+  </rm:searchPath>
+  <rm:searchPath name="knime-ensembles">
+    <rm:provider componentTypes="osgi.bundle,eclipse.feature" readerType="git" mutable="false">
+      <rm:property key="buckminster.mutable" value="false"/>
+      <rm:uri format="{0}/git/knime-ensembles,{1}">
+        <bc:propertyRef key="workspace.root"/>
+        <bc:propertyRef key="buckminster.component"/>
+      </rm:uri>
+    </rm:provider>
+  </rm:searchPath>
   <rm:searchPath name="external-bundles">
     <rm:provider componentTypes="osgi.bundle,eclipse.feature" readerType="p2" mutable="false">
       <rm:property key="buckminster.mutable" value="false"/>
@@ -48,7 +150,7 @@
     <rm:provider componentTypes="eclipse.feature,osgi.bundle,buckminster" readerType="p2" source="false" mutable="false">
       <rm:property key="buckminster.source" value="false"/>
       <rm:property key="buckminster.mutable" value="false"/>
-      <rm:uri format="https://mirror.knime.org/eclipse/p2-neon"/>
+      <rm:uri format="https://mirror.knime.org/eclipse/p2-oxygen"/>
     </rm:provider>
   </rm:searchPath>
   <rm:searchPath name="local-tp">
