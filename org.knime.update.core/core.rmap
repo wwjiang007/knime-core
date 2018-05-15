@@ -1,7 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <rm:rmap xmlns:bc="http://www.eclipse.org/buckminster/Common-1.0" xmlns:rm="http://www.eclipse.org/buckminster/RMap-1.0">
   <rm:locator pattern="^org\.knime\.build\.config" searchPathRef="knime-jenkins" />
-  <rm:locator pattern="^org\.knime\..*" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\..*base(\..+)?" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\..*core(\..+)?" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\..*deprecated(\..+)?" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\..*ext(\..+)?" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\..*features(\..+)?" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\..*jsnippets(\..+)?" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\..*product(\..+)?" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\..*startup(\..+)?" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\..*stats(\..+)?" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\..*time(\..+)?" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\..*timeseries(\..+)?" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\..*update(\..+)?" searchPathRef="knime-core" />
+  <rm:locator pattern="^org\.knime\..*workbench(\..+)?" searchPathRef="knime-core" />
   <rm:locator searchPathRef="external-bundles" failOnError="false"/>
   <rm:locator searchPathRef="local-mirror" failOnError="false"/>
   <rm:locator searchPathRef="local-tp"/>
