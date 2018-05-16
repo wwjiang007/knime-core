@@ -4,7 +4,9 @@
 	<dependencies>
 		<!-- these dependencies are needed for for the automatic build system -->
 		<dependency name="org.knime.build.config" componentType="osgi.bundle" />
+		<dependency name="org.eclipse.platform" componentType="eclipse.feature" />
 	</dependencies>
+
 	<actions>
 		<!-- Sign only bundles that are not signed yet. This is achieved by using 
 			a custom ant target. Note that we cannot alter the existing action because 
