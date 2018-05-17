@@ -44,7 +44,6 @@
   <rm:locator pattern="^org\.knime\.workbench\.ui\.browser" searchPathRef="knime-core" />
   <rm:locator pattern="^org\.knime\.workbench\.ui\.layout" searchPathRef="knime-core" />
   <rm:locator pattern="^org\.knime\.workbench\.workflowcoach" searchPathRef="knime-core" />
-  <rm:locator pattern="^org\.knime\..*" searchPathRef="knime-core" />
   <rm:locator searchPathRef="external-bundles" failOnError="false"/>
   <rm:locator searchPathRef="local-mirror" failOnError="false"/>
   <rm:locator searchPathRef="local-tp"/>
