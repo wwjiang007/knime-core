@@ -5,6 +5,7 @@
 		<!-- these dependencies are needed for for the automatic build system -->
 		<dependency name="org.knime.build.config" componentType="osgi.bundle" />
 		<dependency name="org.eclipse.platform" componentType="eclipse.feature" />
+		<dependency name="org.eclipse.jdt" componentType="eclipse.feature" />
 	</dependencies>
 
 	<actions>
