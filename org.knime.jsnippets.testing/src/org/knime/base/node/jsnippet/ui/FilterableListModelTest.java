@@ -56,7 +56,7 @@ import org.junit.Test;
  */
 
 /**
- * Test for {@link BundleListPanel.FilterableListModel}.
+ * Test for {@link FilterableListModel}.
  *
  * @author Jonathan Hale
  */
@@ -67,8 +67,8 @@ public class FilterableListModelTest {
     @Test
     public void testAddBundle() {
         /* Test filtering in BundleListModel */
-        final BundleListPanel.FilterableListModel model =
-            new BundleListPanel.FilterableListModel(Arrays.asList("a", "ab", "b", "abc", "c"));
+        final FilterableListModel model =
+            new FilterableListModel(Arrays.asList("a", "ab", "b", "abc", "c"));
         assertEquals(5, model.getSize());
 
         /* Test filtering by "c" yields two results */
@@ -91,6 +91,14 @@ public class FilterableListModelTest {
 
         /* Test clearing the filter */
         model.setFilter("");
+        assertEquals(model.getSize(), 5);
+
+        /* Test explicit exclusion */
+        model.setExcluded(new String[]{"a", "ab", "b", "c"});
+        assertEquals(model.getSize(), 1);
+        assertEquals(model.getElementAt(0), "abc");
+
+        model.setExcluded(new String[0]);
         assertEquals(model.getSize(), 5);
     }
 }

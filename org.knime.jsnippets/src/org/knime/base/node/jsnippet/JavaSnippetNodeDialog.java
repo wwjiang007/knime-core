@@ -48,6 +48,7 @@
 package org.knime.base.node.jsnippet;
 
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Frame;
 import java.awt.GridLayout;
@@ -55,6 +56,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
@@ -77,6 +79,7 @@ import javax.swing.event.TableModelListener;
 import javax.swing.table.TableColumnModel;
 import javax.swing.text.BadLocationException;
 
+import org.eclipse.core.runtime.Platform;
 import org.fife.rsta.ac.LanguageSupport;
 import org.fife.rsta.ac.LanguageSupportFactory;
 import org.fife.rsta.ac.java.JarManager;
@@ -85,6 +88,7 @@ import org.fife.ui.rsyntaxtextarea.ErrorStrip;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rsyntaxtextarea.folding.Fold;
 import org.fife.ui.rsyntaxtextarea.folding.FoldManager;
+import org.fife.ui.rsyntaxtextarea.parser.ParserNotice.Level;
 import org.fife.ui.rtextarea.RTextScrollPane;
 import org.knime.base.node.jsnippet.guarded.GuardedDocument;
 import org.knime.base.node.jsnippet.guarded.JavaSnippetDocument;
@@ -107,6 +111,7 @@ import org.knime.base.node.jsnippet.ui.JarListPanel;
 import org.knime.base.node.jsnippet.ui.OutFieldsTable;
 import org.knime.base.node.jsnippet.ui.OutFieldsTableModel;
 import org.knime.base.node.jsnippet.util.JavaSnippetSettings;
+import org.knime.base.node.jsnippet.util.field.JavaColumnField;
 import org.knime.core.data.DataTableSpec;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeDialogPane;
@@ -117,6 +122,8 @@ import org.knime.core.node.NodeSettingsWO;
 import org.knime.core.node.NotConfigurableException;
 import org.knime.core.node.util.ViewUtils;
 import org.knime.core.node.workflow.FlowVariable;
+import org.osgi.framework.Bundle;
+import org.osgi.framework.Version;
 
 /**
  * The dialog of the java snippet node.
@@ -126,7 +133,9 @@ import org.knime.core.node.workflow.FlowVariable;
 public class JavaSnippetNodeDialog extends NodeDialogPane implements TemplateNodeDialog<JavaSnippetTemplate> {
     private static final NodeLogger LOGGER = NodeLogger.getLogger(JavaSnippetNodeDialog.class);
 
-    private static final String SNIPPET_TAB = "Java Snippet";
+    private static final String SNIPPET_TAB_NAME = "Java Snippet";
+
+    private static final String ADDITIONAL_BUNDLES_TAB_NAME = "Additional Bundles";
 
     private JSnippetTextArea m_snippetTextArea;
 
@@ -162,6 +171,9 @@ public class JavaSnippetNodeDialog extends NodeDialogPane implements TemplateNod
 
     private JLabel m_templateLocation;
 
+    private ErrorStrip m_errorStrip = null;
+
+
     /**
      * Create a new Dialog.
      *
@@ -189,7 +201,7 @@ public class JavaSnippetNodeDialog extends NodeDialogPane implements TemplateNod
         m_flowVarsList.install(m_snippetTextArea);
         m_flowVarsList.install(m_fieldsController);
 
-        addTab(SNIPPET_TAB, panel);
+        addTab(SNIPPET_TAB_NAME, panel);
         if (!isPreview) {
             panel.setPreferredSize(new Dimension(800, 600));
         }
@@ -198,7 +210,7 @@ public class JavaSnippetNodeDialog extends NodeDialogPane implements TemplateNod
 
         m_bundleListPanel = new BundleListPanel();
         m_bundleListPanel.getListModel().addListDataListener(forceReparseListener);
-        addTab("Additional Bundles", m_bundleListPanel);
+        addTab(ADDITIONAL_BUNDLES_TAB_NAME, m_bundleListPanel);
 
         if (!isPreview) {
             // The preview does not have the templates tab
@@ -249,6 +261,8 @@ public class JavaSnippetNodeDialog extends NodeDialogPane implements TemplateNod
                 // so we don't update when fields are removed.
                 updateAutocompletion();
             }
+
+            updateCustomTypesBundles();
         };
         m_inFieldsTable.getTable().getModel().addTableModelListener(tableModelListener);
         m_outFieldsTable.getTable().getModel().addTableModelListener(tableModelListener);
@@ -326,12 +340,20 @@ public class JavaSnippetNodeDialog extends NodeDialogPane implements TemplateNod
     final ListDataListener forceReparseListener = new ListDataListener() {
         private void updateSnippet() {
             m_snippet.setJarFiles(m_jarPanel.getJarFiles());
+            m_snippet.setAdditionalBundles(m_bundleListPanel.getBundles());
+
             // force reparsing of the snippet
             for (int i = 0; i < m_snippetTextArea.getParserCount(); i++) {
                 m_snippetTextArea.forceReparsing(i);
             }
+
             // update autocompletion
             updateAutocompletion();
+
+            // update error strip:
+            // HACK: This forces refreshMarkers(), which is not triggered by reparsing of the document for some reason.
+            // We are just re-setting the default again here.
+            m_errorStrip.setLevelThreshold(Level.WARNING);
         }
 
         @Override
@@ -408,6 +430,7 @@ public class JavaSnippetNodeDialog extends NodeDialogPane implements TemplateNod
      */
     private JComponent createSnippetPanel() {
         m_snippetTextArea = new JSnippetTextArea(m_snippet);
+        m_errorStrip = new ErrorStrip(m_snippetTextArea);
 
         // reset style which causes a recreation of the folds
         // this code is also executed in "onOpen" but that is not called for the template viewer tab
@@ -420,8 +443,7 @@ public class JavaSnippetNodeDialog extends NodeDialogPane implements TemplateNod
         final JPanel snippet = new JPanel(new BorderLayout());
         snippet.add(snippetScroller, BorderLayout.CENTER);
 
-        final ErrorStrip es = new ErrorStrip(m_snippetTextArea);
-        snippet.add(es, BorderLayout.LINE_END);
+        snippet.add(m_errorStrip, BorderLayout.LINE_END);
 
         return snippet;
     }
@@ -461,15 +483,15 @@ public class JavaSnippetNodeDialog extends NodeDialogPane implements TemplateNod
     }
 
     private void updateAutocompletion() {
-        final LanguageSupportFactory lsf = LanguageSupportFactory.get();
-        final LanguageSupport support =
-            lsf.getSupportFor(org.fife.ui.rsyntaxtextarea.SyntaxConstants.SYNTAX_STYLE_JAVA);
-        final JavaLanguageSupport jls = (JavaLanguageSupport)support;
-        final JarManager jarManager = jls.getJarManager();
-
         try {
             if (m_autoCompletionJars == null || !Arrays.stream(m_autoCompletionJars).allMatch(file -> file.exists())
                 || !Arrays.equals(m_autoCompletionJars, m_snippet.getCompiletimeClassPath())) {
+
+                final LanguageSupportFactory lsf = LanguageSupportFactory.get();
+                final LanguageSupport support =
+                    lsf.getSupportFor(org.fife.ui.rsyntaxtextarea.SyntaxConstants.SYNTAX_STYLE_JAVA);
+                final JavaLanguageSupport jls = (JavaLanguageSupport)support;
+                final JarManager jarManager = jls.getJarManager();
 
                 m_autoCompletionJars = m_snippet.getCompiletimeClassPath();
                 jarManager.clearClassFileSources();
@@ -554,6 +576,7 @@ public class JavaSnippetNodeDialog extends NodeDialogPane implements TemplateNod
         m_snippet.setSettings(m_settings);
         m_jarPanel.setJarFiles(m_settings.getJarFiles());
         m_bundleListPanel.setBundles(m_settings.getBundles());
+        updateCustomTypesBundles();
 
         m_fieldsController.updateData(m_settings, specs[0], getAvailableFlowVariables());
 
@@ -569,6 +592,13 @@ public class JavaSnippetNodeDialog extends NodeDialogPane implements TemplateNod
         m_templateLocation.setText(getTemplateLocation());
 
         updateAutocompletion();
+
+        try {
+            /* Update "Additional Bundles" tab title */
+            validateBundlesSetting();
+        } catch (InvalidSettingsException e) {
+            /* This is not a problem, we only want the "Additional Bundles" tab title to be updated appropriately */
+        }
     }
 
     /**
@@ -601,16 +631,38 @@ public class JavaSnippetNodeDialog extends NodeDialogPane implements TemplateNod
         m_jarPanel.setJarFiles(m_settings.getJarFiles());
         m_bundleListPanel.setBundles(m_settings.getBundles());
 
+        updateCustomTypesBundles();
+
         m_fieldsController.updateData(m_settings, spec, flowVariables);
         // update template info panel
         m_templateLocation.setText(createTemplateLocationText(template));
 
-        setSelected(SNIPPET_TAB);
+        setSelected(SNIPPET_TAB_NAME);
         // set caret position to the start of the custom expression
         m_snippetTextArea.setCaretPosition(
             m_snippet.getDocument().getGuardedSection(JavaSnippetDocument.GUARDED_BODY_START).getEnd().getOffset() + 1);
         m_snippetTextArea.requestFocus();
 
+    }
+
+    /**
+     * Update bundles included with custom types
+     */
+    private void updateCustomTypesBundles() {
+        final ArrayList<Bundle> bundles = new ArrayList<>();
+        for (final JavaColumnField f : m_inFieldsTable.getInColFields()) {
+            final Bundle b = JavaSnippet.resolveBundleForJavaType(f.getJavaType());
+            if(b != null) {
+                bundles.add(b);
+            }
+        }
+        for (final JavaColumnField f : m_outFieldsTable.getOutColFields()) {
+            final Bundle b = JavaSnippet.resolveBundleForJavaType(f.getJavaType());
+            if(b != null) {
+                bundles.add(b);
+            }
+        }
+        m_bundleListPanel.setCustomTypeBundles(bundles);
     }
 
     /**
@@ -672,11 +724,50 @@ public class JavaSnippetNodeDialog extends NodeDialogPane implements TemplateNod
         if (!outFieldsModel.validateValues()) {
             throw new IllegalArgumentException("The output fields table has errors.");
         }
+
         s.setBundles(m_bundleListPanel.getBundles());
+        validateBundlesSetting();
 
         // give subclasses the chance to modify settings
         preSaveSettings(s);
         s.saveSettings(settings);
+    }
+
+    private void validateBundlesSetting() throws InvalidSettingsException {
+        // Check additional bundles
+        for (final String bundleString : m_snippet.getSettings().getBundles()) {
+            final String[] split = bundleString.split(" ");
+            final String bundleName = split[0];
+            if (split.length <= 1) {
+                setAdditionalBundlesTabTitle(false);
+                throw new InvalidSettingsException(String.format("Missing version for bundle \"%s\" in settings", bundleName));
+            }
+
+            final Bundle[] bundles = Platform.getBundles(bundleName, null);
+            if (bundles == null) {
+                setAdditionalBundlesTabTitle(false);
+                throw new InvalidSettingsException("Bundle \"" + bundleName + "\" required by this snippet was not found.");
+            }
+
+            boolean bundleFound = false;
+            final Version savedVersion = Version.parseVersion(split[1]);
+            for (final Bundle bundle : bundles) {
+                final Version installedVersion = bundle.getVersion();
+
+                if (JavaSnippet.versionMatches(installedVersion, savedVersion)) {
+                    bundleFound = true;
+                    break;
+                }
+            }
+
+            if (!bundleFound) {
+                setAdditionalBundlesTabTitle(false);
+                throw new InvalidSettingsException(
+                    String.format("No installed version of \"%s\" matched version range [%s, %d.0.0).", bundleName,
+                        savedVersion, savedVersion.getMajor() + 1));
+            }
+        }
+        setAdditionalBundlesTabTitle(true);
     }
 
     /**
@@ -686,5 +777,21 @@ public class JavaSnippetNodeDialog extends NodeDialogPane implements TemplateNod
      */
     protected void preSaveSettings(final JavaSnippetSettings s) {
         // just a place holder.
+    }
+
+    /*
+     * Set the title of "Additional Bundles" panel so that it contains " <!>" if settings are invalid.
+     */
+    private void setAdditionalBundlesTabTitle(final boolean bundleSettingsValid) {
+        /* Get the tab assuming it displays that bundle Settings are valid. If not, tab will be null. */
+        final Component tab = getTab(ADDITIONAL_BUNDLES_TAB_NAME);
+
+        /* tab != null is equivalent to it displaying that settings are valid */
+        if(bundleSettingsValid != (tab != null)) {
+            /* State changed, set the title accordingly */
+            final String oldName = ADDITIONAL_BUNDLES_TAB_NAME + (!bundleSettingsValid ? "" : " <!>");
+            final String newName = ADDITIONAL_BUNDLES_TAB_NAME + (bundleSettingsValid ? "" : " <!>");
+            renameTab(oldName, newName);
+        }
     }
 }

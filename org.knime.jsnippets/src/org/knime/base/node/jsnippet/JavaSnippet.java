@@ -155,6 +155,7 @@ import org.knime.core.node.NodeLogger;
 import org.knime.core.node.workflow.FlowVariable;
 import org.knime.core.util.FileUtil;
 import org.osgi.framework.Bundle;
+import org.osgi.framework.Version;
 import org.osgi.framework.namespace.BundleNamespace;
 import org.osgi.framework.wiring.BundleWire;
 import org.osgi.framework.wiring.BundleWiring;
@@ -167,6 +168,20 @@ import org.osgi.framework.wiring.BundleWiring;
  */
 @SuppressWarnings("restriction")
 public final class JavaSnippet implements JSnippet<JavaSnippetTemplate>, Closeable {
+
+    /**
+     * Check whether a given source version sufficiently matches a certain target version.
+     *
+     * @param source Version that should match <code>target</code>
+     * @param target Version that should be matched by <code>source</code>
+     * @return true if source is not {@link Version#emptyVersion}, major versions are equal and the source minor/micro
+     *         version is greater or equal to the required minor/minor version.
+     */
+    public static boolean versionMatches(final Version source, final Version target) {
+        return !source.equals(Version.emptyVersion) && source.getMajor() == target.getMajor()
+            && source.compareTo(target) >= 0;
+    }
+
     private static class SnippetCache {
         private String m_snippetCode;
 
@@ -904,12 +919,34 @@ public final class JavaSnippet implements JSnippet<JavaSnippetTemplate>, Closeab
         }
 
         // Check additional bundles
-        for (final String bundleName : m_settings.getBundles()) {
-            final Bundle bundle = Platform.getBundle(bundleName);
-            if (bundle == null) {
+        for (final String bundleString : m_settings.getBundles()) {
+            final String[] split = bundleString.split(" ");
+            final String bundleName = split[0];
+            if (split.length <= 1) {
+                errors.add(String.format("Missing version for bundle \"%s\" in settings", bundleName));
+                continue;
+            }
+
+            final Bundle[] bundles = Platform.getBundles(bundleName, null);
+            if (bundles == null) {
                 errors.add("Bundle \"" + bundleName + "\" required by this snippet was not found.");
-            } else {
-                // TODO Version warning?
+                continue;
+            }
+
+            boolean bundleFound = false;
+            final Version savedVersion = Version.parseVersion(split[1]);
+            for (final Bundle bundle : bundles) {
+                final Version installedVersion = bundle.getVersion();
+
+                if (versionMatches(installedVersion, savedVersion)) {
+                    bundleFound = true;
+                    break;
+                }
+            }
+
+            if (!bundleFound) {
+                errors.add(String.format("No installed version of \"%s\" matched version range [%s, %d.0.0).",
+                    bundleName, savedVersion, savedVersion.getMajor() + 1));
             }
         }
 
@@ -1026,9 +1063,6 @@ public final class JavaSnippet implements JSnippet<JavaSnippetTemplate>, Closeab
         return c;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     @SuppressWarnings("rawtypes")
     public JavaSnippetTemplate createTemplate(final Class metaCategory) {
@@ -1036,9 +1070,6 @@ public final class JavaSnippet implements JSnippet<JavaSnippetTemplate>, Closeab
         return template;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public File getTempClassPath() {
         return m_tempClassPathDir;
@@ -1053,9 +1084,6 @@ public final class JavaSnippet implements JSnippet<JavaSnippetTemplate>, Closeab
         return m_fields;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void setJavaSnippetFields(final JavaSnippetFields fields) {
         m_fields = fields;
@@ -1072,6 +1100,16 @@ public final class JavaSnippet implements JSnippet<JavaSnippetTemplate>, Closeab
     public void setJarFiles(final String[] jarFiles) {
         if (!Arrays.equals(m_jarFiles, jarFiles)) {
             m_jarFiles = jarFiles.clone();
+            m_snippetCache.invalidate();
+        }
+    }
+
+    /**
+     * @param bundles
+     */
+    public void setAdditionalBundles(final String[] bundles) {
+        if (!Arrays.equals(m_settings.getBundles(), bundles)) {
+            m_settings.setBundles(bundles);
             m_snippetCache.invalidate();
         }
     }
@@ -1300,6 +1338,21 @@ public final class JavaSnippet implements JSnippet<JavaSnippetTemplate>, Closeab
                 }
             }
             return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Get the {@link Bundle} which contains the given class.
+     *
+     * @param javaType Class for which to get the bundle.
+     * @return the Bundle or <code>null</code>, if it is a built-in type.
+     */
+    public synchronized static Bundle resolveBundleForJavaType(final Class<?> javaType) {
+        if (javaType.getClassLoader() instanceof ModuleClassLoader) {
+            final ModuleClassLoader moduleClassLoader = (ModuleClassLoader)javaType.getClassLoader();
+            return moduleClassLoader.getBundle();
+        } else {
+            return null;
         }
     }
 
