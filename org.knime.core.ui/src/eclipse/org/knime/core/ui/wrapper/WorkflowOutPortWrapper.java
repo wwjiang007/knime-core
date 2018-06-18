@@ -48,7 +48,10 @@
  */
 package org.knime.core.ui.wrapper;
 
+import org.knime.core.node.port.PortObject;
+import org.knime.core.node.port.PortObjectSpec;
 import org.knime.core.node.port.PortType;
+import org.knime.core.node.workflow.FlowObjectStack;
 import org.knime.core.node.workflow.NodeContainerState;
 import org.knime.core.node.workflow.NodeStateChangeListener;
 import org.knime.core.node.workflow.NodeStateEvent;
@@ -72,6 +75,16 @@ public class WorkflowOutPortWrapper extends AbstractWrapper<WorkflowOutPort> imp
 
     public static final WorkflowOutPortWrapper wrap(final WorkflowOutPort wop) {
         return (WorkflowOutPortWrapper)Wrapper.wrapOrGet(wop, o -> new WorkflowOutPortWrapper(o));
+    }
+
+    @Override
+    public PortObjectSpec getPortObjectSpec() {
+        return unwrap().getPortObjectSpec();
+    }
+
+    @Override
+    public PortObject getPortObject() {
+        return unwrap().getPortObject();
     }
 
     @Override
@@ -147,6 +160,11 @@ public class WorkflowOutPortWrapper extends AbstractWrapper<WorkflowOutPort> imp
     @Override
     public NodeContainerState getNodeContainerState() {
         return unwrap().getNodeContainerState();
+    }
+
+    @Override
+    public FlowObjectStack getFlowObjectStack() {
+        return unwrap().getFlowObjectStack();
     }
 
     @Override

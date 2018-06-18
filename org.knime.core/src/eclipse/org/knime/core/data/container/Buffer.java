@@ -220,10 +220,10 @@ public class Buffer implements KNIMEStreamConstants {
     private static final String CFG_SIZE_L = "table.size.long";
 
     /** Current version string. */
-    private static final String VERSION = "container_10";
+    public static final String VERSION = "container_10";
 
-    /** The version number corresponding to VERSION. */
-    private static final int IVERSION = 10;
+    /** The version number corresponding to {@link #VERSION}. */
+    public static final int IVERSION = 10;
 
     private static final HashMap<String, Integer> COMPATIBILITY_MAP;
 
@@ -388,6 +388,15 @@ public class Buffer implements KNIMEStreamConstants {
     private TableStoreFormat m_outputFormat;
     private AbstractTableStoreWriter m_outputWriter;
     private AbstractTableStoreReader m_outputReader;
+
+    /** The settings for the table store format that describes how the table is persisted. That is:
+     * <ul>
+     * <li>while writing: null
+     * <li>after write: the settings that the writer writes as part of {@link #closeInternal()}
+     * <li>during read: the settings read in the constructor ({@link #readMetaFromFile(InputStream, File)})
+     * </ul>
+     */
+    private NodeSettingsRO m_formatSettings;
 
     /** maximum number of rows that are in memory. */
     private int m_maxRowsInMem;
@@ -704,9 +713,6 @@ public class Buffer implements KNIMEStreamConstants {
 
     private DataCell handleIncomingBlob(final DataCell cell, final int col, final int totalColCount,
         final boolean copyForVersionHop, final boolean forceCopyOfBlobsArg) throws IOException {
-        if (!(m_outputFormat instanceof DefaultTableStoreFormat)) {
-            return cell;
-        }
         // whether the content of the argument row needs to be copied
         // into a new BlobSupportDataRow (will do that when either this
         // flag is true or cellCopies != null)
@@ -888,8 +894,7 @@ public class Buffer implements KNIMEStreamConstants {
     }
 
     private void writeBlobDataCell(final BlobDataCell cell, final BlobAddress a) throws IOException {
-        DataCellSerializer<DataCell> ser = ((DefaultTableStoreWriter)m_outputWriter)
-                .getSerializerForDataCell(CellClassInfo.get(cell));
+        DataCellSerializer<DataCell> ser = m_outputWriter.getSerializerForDataCell(CellClassInfo.get(cell));
         // addRow will make sure that m_indicesOfBlobInColumns is initialized
         // when this method is called. If this method is called from a different
         // buffer object, it means that this buffer has been closed!
@@ -1003,13 +1008,14 @@ public class Buffer implements KNIMEStreamConstants {
             try {
                 flushBuffer();
                 m_outputWriter.close();
-                NodeSettings nodeSettings = new NodeSettings("table-format-meta-info");
-                m_outputWriter.writeMetaInfoAfterWrite(nodeSettings);
+                NodeSettings formatSettings = new NodeSettings(CFG_TABLE_FORMAT_CONFIG);
+                m_outputWriter.writeMetaInfoAfterWrite(formatSettings);
+                m_formatSettings = formatSettings;
                 m_list = null;
                 double sizeInMB = m_binFile.length() / (double)(1 << 20);
                 String size = NumberFormat.getInstance().format(sizeInMB);
                 LOGGER.debug("Buffer file (" + m_binFile.getAbsolutePath() + ") is " + size + "MB in size");
-                initOutputReader(nodeSettings, IVERSION);
+                initOutputReader(formatSettings, IVERSION);
             } catch (IOException ioe) {
                 throw new RuntimeException("Cannot close stream of file \"" + m_binFile.getName() + "\"", ioe);
             } catch (InvalidSettingsException ex) {
@@ -1087,7 +1093,13 @@ public class Buffer implements KNIMEStreamConstants {
         subSettings.addInt(CFG_BUFFER_ID, m_bufferID);
         subSettings.addString(CFG_TABLE_FORMAT, m_outputFormat.getClass().getName());
         NodeSettingsWO formatSettings = subSettings.addNodeSettings(CFG_TABLE_FORMAT_CONFIG);
-        m_outputWriter.writeMetaInfoAfterWrite(formatSettings);
+        m_formatSettings.copyTo(formatSettings);
+        if (m_outputWriter instanceof DefaultTableStoreWriter) {
+            // AP-8954 -- for standard KNIME tables write the meta information into the root so that 3.5 and before
+            // can load it;
+            // these settings are no longer read in newer versions of KNIME (3.6+) -- attempt of forward compatibility
+            m_formatSettings.copyTo(subSettings);
+        }
         settings.saveToXML(out);
     }
 
@@ -1163,6 +1175,7 @@ public class Buffer implements KNIMEStreamConstants {
                         "Invalid table format '%s' - unable to restore table.", outputFormat)));
             NodeSettingsRO outputFormatSettings =
                     m_version >= 10 ? subSettings.getNodeSettings(CFG_TABLE_FORMAT_CONFIG) : subSettings;
+            m_formatSettings = outputFormatSettings;
             initOutputReader(outputFormatSettings, m_version);
         }
     }
@@ -1173,13 +1186,11 @@ public class Buffer implements KNIMEStreamConstants {
      * @throws IOException
      * @throws InvalidSettingsException
      */
-    private void initOutputReader(final NodeSettingsRO outputFormatSettings, final int version) throws IOException, InvalidSettingsException {
+    private void initOutputReader(final NodeSettingsRO outputFormatSettings, final int version)
+        throws IOException, InvalidSettingsException {
         m_outputReader = m_outputFormat.createReader(m_binFile, m_spec, outputFormatSettings, m_globalRepository,
             version, !shouldSkipRowKey());
-        m_outputReader.setFileStoreHandlerRepository(m_fileStoreHandlerRepository);
-        if (m_outputReader instanceof DefaultTableStoreReader) {
-            ((DefaultTableStoreReader)m_outputReader).setBufferAfterConstruction(this);
-        }
+        m_outputReader.setBufferAndFileStoreHandlerRepository(this, m_fileStoreHandlerRepository);
     }
 
     /**
@@ -1247,7 +1258,7 @@ public class Buffer implements KNIMEStreamConstants {
      *
      * @return (Workflow-) global table repository.
      */
-    final Map<Integer, ContainerTable> getGlobalRepository() {
+    public final Map<Integer, ContainerTable> getGlobalRepository() {
         return m_globalRepository;
     }
 
@@ -1560,6 +1571,9 @@ public class Buffer implements KNIMEStreamConstants {
             zipOut.setLevel(Deflater.NO_COMPRESSION);
         }
         zipOut.putNextEntry(new ZipEntry(ZIP_ENTRY_DATA));
+        // these are the conditions:
+        //    !usesOutFile() --> data all kept in memory, small tables
+        //    m_version< ... --> container version bump
         if (!usesOutFile() || m_version < IVERSION) {
             // need to use new buffer since we otherwise write properties
             // of this buffer, which prevents it from further reading (version
@@ -1679,7 +1693,7 @@ public class Buffer implements KNIMEStreamConstants {
      *
      * @return the buffer ID or -1
      */
-    int getBufferID() {
+    public int getBufferID() {
         return m_bufferID;
     }
 

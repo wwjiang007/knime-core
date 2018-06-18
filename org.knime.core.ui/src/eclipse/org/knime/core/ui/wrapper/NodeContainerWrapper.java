@@ -51,7 +51,9 @@ package org.knime.core.ui.wrapper;
 import java.net.URL;
 
 import org.knime.core.node.InvalidSettingsException;
+import org.knime.core.node.NodeDialogPane;
 import org.knime.core.node.NodeFactory.NodeType;
+import org.knime.core.node.NotConfigurableException;
 import org.knime.core.node.config.base.ConfigBaseRO;
 import org.knime.core.node.workflow.NodeAnnotation;
 import org.knime.core.node.workflow.NodeContainer;
@@ -71,6 +73,7 @@ import org.knime.core.node.workflow.NodeUIInformationListener;
 import org.knime.core.node.workflow.SingleNodeContainer;
 import org.knime.core.node.workflow.SubNodeContainer;
 import org.knime.core.node.workflow.WorkflowManager;
+import org.knime.core.ui.node.workflow.InteractiveWebViewsResultUI;
 import org.knime.core.ui.node.workflow.NodeContainerUI;
 import org.knime.core.ui.node.workflow.NodeInPortUI;
 import org.knime.core.ui.node.workflow.NodeOutPortUI;
@@ -94,13 +97,15 @@ public abstract class NodeContainerWrapper<W extends NodeContainer> extends Abst
     }
 
     /**
-    * Wraps the object via {@link Wrapper#wrapOrGet(Object, java.util.function.Function)}.
-    * It also checks for sub-types of the node container and uses the more specific wrappers.
-    *
-    * @param nc the object to be wrapped
-    * @return a new wrapper or a already existing one
-    */
+     * Wraps the object. It also checks for sub-types of the node container and uses the more specific wrappers.
+     *
+     * @param nc the object to be wrapped
+     * @return a new wrapper or a already existing one or <code>null</code> if nc is null
+     */
     public static final NodeContainerWrapper wrap(final NodeContainer nc) {
+        if (nc == null) {
+            return null;
+        }
         if (nc instanceof SubNodeContainer) {
             return SubNodeContainerWrapper.wrap((SubNodeContainer)nc);
         } else if (nc instanceof SingleNodeContainer) {
@@ -110,6 +115,15 @@ public abstract class NodeContainerWrapper<W extends NodeContainer> extends Abst
         } else {
             throw new UnsupportedOperationException();
         }
+    }
+
+    /**
+     * {@inheritDoc}
+     * @since 3.6
+     */
+    @Override
+    public NodeDialogPane getDialogPaneWithSettings() throws NotConfigurableException {
+        return unwrap().getDialogPaneWithSettings();
     }
 
     @Override
@@ -302,6 +316,11 @@ public abstract class NodeContainerWrapper<W extends NodeContainer> extends Abst
     @Override
     public boolean hasInteractiveView() {
         return unwrap().hasInteractiveView();
+    }
+
+    @Override
+    public InteractiveWebViewsResultUI getInteractiveWebViews() {
+        return InteractiveWebViewsResultWrapper.wrap(unwrap().getInteractiveWebViews());
     }
 
     @Override

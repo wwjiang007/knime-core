@@ -52,9 +52,12 @@ import java.net.URL;
 
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeDialog;
+import org.knime.core.node.NodeDialogPane;
 import org.knime.core.node.NodeFactory.NodeType;
 import org.knime.core.node.NodeView;
+import org.knime.core.node.NotConfigurableException;
 import org.knime.core.node.config.base.ConfigBaseRO;
+import org.knime.core.node.web.WebTemplate;
 import org.knime.core.node.workflow.NodeAnnotation;
 import org.knime.core.node.workflow.NodeContainer;
 import org.knime.core.node.workflow.NodeContainer.NodeLock;
@@ -215,14 +218,13 @@ public interface NodeContainerUI extends NodeProgressListener, NodeContainerStat
      */
     boolean hasDataAwareDialogPane();
 
-    //TODO can probably be removed entirely
-//    /** Return a NodeDialogPane for a node which can be embedded into
-//     * a JFrame oder another GUI element.
-//     *
-//     * @return A dialog pane for the corresponding node.
-//     * @throws NotConfigurableException if node cannot be configured
-//     */
-//    NodeDialogPane getDialogPaneWithSettings() throws NotConfigurableException;
+    /** Return a NodeDialogPane for a node which can be embedded into
+     * a JFrame oder another GUI element.
+     *
+     * @return A dialog pane for the corresponding node.
+     * @throws NotConfigurableException if node cannot be configured
+     */
+    NodeDialogPane getDialogPaneWithSettings() throws NotConfigurableException;
 
     /** Called for nodes having {@linkplain org.knime.core.node.DataAwareNodeDialogPane data aware dialogs} in order
      * to check whether to prompt for execution or not.
@@ -310,13 +312,17 @@ public interface NodeContainerUI extends NodeProgressListener, NodeContainerStat
      */
     String getInteractiveViewName();
 
-//    /**
-//     * @return interactive view.
-//     * @since 2.8
-//     */
-//    <V extends AbstractNodeView<?> & InteractiveView<?, ? extends ViewContent, ? extends ViewContent>> V
-//        getInteractiveView();
-//
+    /** Get the 'interactive web views' provided by this node. That is, views providing a {@link WebTemplate} for an interactive
+     * web view. Native nodes can have at most one view, wrapped metanodes may have many (one for
+     * each contained view node), metanodes have none.
+     *
+     * <p>The name associated with the web view (e.g. JS scatter plot) comes from a node's description (xml).
+     * @return An new {@link InteractiveWebViewsResultUI} with possibly 0 or more views.
+     */
+    @SuppressWarnings("rawtypes")
+    InteractiveWebViewsResultUI getInteractiveWebViews();
+
+
 //    /** The input stack associated with this node - for ordinary nodes this is the the merged stack of the input
 //     * (ignoring any variables pushed by the node itself), for workflows this is the workflow variable "stack".
 //     * @return The stack, usually not null when used in "normal operation" (possible TODO: unset the stack when node

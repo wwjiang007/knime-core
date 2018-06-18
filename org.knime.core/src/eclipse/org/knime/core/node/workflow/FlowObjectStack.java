@@ -564,6 +564,23 @@ public final class FlowObjectStack implements Iterable<FlowObject> {
         return (T)toClone.cloneAndUnsetOwner();
     }
 
+    /**
+     * Creates a new {@link FlowObjectStack} from a list of flow variables.
+     *
+     * @param flowVariables the flow variables to push to the stack
+     * @param id id of the node this flow object stack is associated with
+     * @return a newly created {@link FlowObjectStack} with the list of flow variables pushed to id
+     * @noreference This method is not intended to be referenced by clients.
+     * @since 3.6
+     */
+    public static FlowObjectStack createFromFlowVariableList(final List<FlowVariable> flowVariables, final NodeID id) {
+        FlowObjectStack stack = new FlowObjectStack(id);
+        for (FlowVariable fv : flowVariables) {
+            stack.push(fv);
+        }
+        return stack;
+    }
+
     private static final Pair<String, Type> getVariableDefinition(
             final String propKey) {
         String varName;

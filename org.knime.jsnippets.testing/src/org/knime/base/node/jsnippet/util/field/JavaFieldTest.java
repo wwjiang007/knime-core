@@ -2,11 +2,11 @@ package org.knime.base.node.jsnippet.util.field;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.lang.reflect.Field;
+import java.util.Optional;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -194,7 +194,7 @@ public class JavaFieldTest {
             /* Ensure via reflection that m_factory has *not* been set */
             final Field field = OutCol.class.getDeclaredField("m_factory");
             field.setAccessible(true);
-            assertNull(field.get(loaded));
+            assertFalse(((Optional<?>)field.get(loaded)).isPresent());
 
             assertEquals(oc.getKnimeName(), loaded.getKnimeName());
             assertEquals(oc.getJavaName(), loaded.getJavaName());
@@ -218,7 +218,7 @@ public class JavaFieldTest {
             /* Ensure via reflection that m_factory has *not* been set */
             final Field field = InCol.class.getDeclaredField("m_factory");
             field.setAccessible(true);
-            assertNull(field.get(loaded));
+            assertFalse(((Optional<?>)field.get(loaded)).isPresent());
 
             assertEquals(ic.getKnimeName(), loaded.getKnimeName());
             assertEquals(ic.getJavaName(), loaded.getJavaName());

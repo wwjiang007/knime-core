@@ -49,7 +49,6 @@
 package org.knime.product.profiles;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Reader;
 import java.net.InetSocketAddress;
@@ -74,8 +73,9 @@ import java.util.Properties;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import java.util.zip.ZipInputStream;
 
+import org.apache.commons.compress.archivers.zip.ZipFile;
+import org.apache.commons.io.IOUtils;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpHost;
@@ -93,6 +93,7 @@ import org.eclipse.core.runtime.IExtensionPoint;
 import org.eclipse.core.runtime.IExtensionRegistry;
 import org.eclipse.core.runtime.Platform;
 import org.knime.core.node.NodeLogger;
+import org.knime.core.util.KNIMEServerHostnameVerifier;
 import org.knime.core.util.PathUtils;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.FrameworkUtil;
@@ -194,7 +195,7 @@ public class ProfileManager {
             combinedProperties.putAll(props);
         }
 
-        // removed "/instance" prefixes from preferences because otherwise they are not applied as default preferences
+        // remove "/instance" prefixes from preferences because otherwise they are not applied as default preferences
         // (because they are instance preferences...)
         for (Object key : new HashSet<>(combinedProperties.keySet())) {
             if (key.toString().startsWith("/instance/")) {
@@ -223,11 +224,13 @@ public class ProfileManager {
         DefaultPreferences.pluginCustomizationFile = pluginCustFile.toAbsolutePath().toString();
     }
 
-    private void replaceVariables(final Properties props, final Path profileLocation) {
+    private void replaceVariables(final Properties props, final Path profileLocation) throws IOException {
         List<VariableReplacer> replacers = Arrays.asList(
             new VariableReplacer.EnvVariableReplacer(m_collectedLogs),
             new VariableReplacer.SyspropVariableReplacer(m_collectedLogs),
             new VariableReplacer.ProfileVariableReplacer(profileLocation, m_collectedLogs),
+            new VariableReplacer.OriginVariableReplacer(profileLocation.getParent().resolve(".originHeaders"),
+                m_collectedLogs),
             new VariableReplacer.CustomVariableReplacer(m_provider, m_collectedLogs));
 
         for (String key : props.stringPropertyNames()) {
@@ -295,7 +298,7 @@ public class ProfileManager {
                     .map(p -> new HttpHost(((InetSocketAddress) p.address()).getAddress()))
                     .orElse(null);
 
-            // timeout; we cannot access KNIMEConstants here because that would acccess preferences
+            // timeout; we cannot access KNIMEConstants here because that would access preferences
             int timeout = 2000;
             String to = System.getProperty("knime.url.timeout", Integer.toString(timeout));
             try {
@@ -313,6 +316,7 @@ public class ProfileManager {
 
             try (CloseableHttpClient client = HttpClients.custom()
                     .setDefaultRequestConfig(requestConfig)
+                    .setSSLHostnameVerifier(KNIMEServerHostnameVerifier.getInstance())
                     .setRedirectStrategy(new DefaultRedirectStrategy()).build()) {
                 HttpGet get = new HttpGet(profileUri);
 
@@ -332,15 +336,25 @@ public class ProfileManager {
                             throw new IOException("Server did not return a ZIP file containing the selected profiles");
                         }
 
+                        Path tempFile = PathUtils.createTempFile("profile-download", ".zip");
+                        try (OutputStream os = Files.newOutputStream(tempFile)) {
+                            IOUtils.copyLarge(response.getEntity().getContent(), os);
+                        }
+
                         Path tempDir = PathUtils.createTempDir("profile-download", stateDir);
-                        try (InputStream is = response.getEntity().getContent()) {
-                            PathUtils.unzip(new ZipInputStream(is), tempDir);
+                        try (ZipFile zf = new ZipFile(tempFile.toFile())) {
+                            PathUtils.unzip(zf, tempDir);
                         }
 
                         // replace profiles only if new data has been downloaded successfully
                         PathUtils.deleteDirectoryIfExists(profileDir);
                         Files.move(tempDir, profileDir, StandardCopyOption.ATOMIC_MOVE);
-                    } else if (code != 304) { // 304 = Not Modified
+                        Files.delete(tempFile);
+
+                        writeOriginHeaders(response.getAllHeaders(), profileDir);
+                    } else if (code == 304) { // 304 = Not Modified
+                        writeOriginHeaders(response.getAllHeaders(), profileDir);
+                    } else {
                         HttpEntity body = response.getEntity();
                         String msg;
                         if (body.getContentType().getValue().startsWith("text/")) {
@@ -365,5 +379,16 @@ public class ProfileManager {
         }
 
         return profileDir;
+    }
+
+    private static void writeOriginHeaders(final Header[] allHeaders, final Path profileDir) throws IOException {
+        Path originHeadersCache = profileDir.resolve(".originHeaders");
+        Properties props = new Properties();
+        for (Header h : allHeaders) {
+            props.put(h.getName(), h.getValue());
+        }
+        try (OutputStream os = Files.newOutputStream(originHeadersCache)) {
+            props.store(os, "");
+        }
     }
 }

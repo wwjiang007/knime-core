@@ -75,16 +75,6 @@ public final class DefaultTableStoreFormat implements TableStoreFormat {
     /** Compression format. */
     static final String CFG_COMPRESSION = "container.compression";
 
-    /** Sub element in config that keeps the list of cell class information (used to be a plain array).
-     */
-    static final String CFG_CELL_CLASSES = "table.datacell.classes";
-
-    /** Class name of data cell. */
-    static final String CFG_CELL_SINGLE_CLASS = "class";
-
-    /** Element type if a cell represents a collection. */
-    static final String CFG_CELL_SINGLE_ELEMENT_TYPE = "collection.element.type";
-
     /**
      * Static field to enable/disable the usage of a GZipInput/OutpuStream when writing the binary data. This option
      * defaults to {@value DataContainer#DEF_GZIP_COMPRESSION}. */
@@ -116,8 +106,8 @@ public final class DefaultTableStoreFormat implements TableStoreFormat {
 
     /** Compression on the binary (main) file. */
     enum CompressionFormat {
-        Gzip,
-        None;
+            Gzip,
+            None;
     }
 
     @Override
@@ -160,8 +150,24 @@ public final class DefaultTableStoreFormat implements TableStoreFormat {
         final NodeSettingsRO settings, final Map<Integer, ContainerTable> tblRep, final int version,
         final boolean isReadRowKey)
                 throws IOException, InvalidSettingsException {
-        return new DefaultTableStoreReader(binFile, spec, settings, tblRep, version, isReadRowKey);
+        return new DefaultTableStoreReader(binFile, spec, settings, version, isReadRowKey);
     }
 
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String getVersion() {
+        return Buffer.VERSION; // we write it but don't read it
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public boolean validateVersion(final String versionString) {
+        return true; // this method is really only called for 3rd party types. Actual validation happens in class Buffer
+
+    }
 
 }

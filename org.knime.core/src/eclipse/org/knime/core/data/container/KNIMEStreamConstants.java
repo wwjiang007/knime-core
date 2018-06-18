@@ -52,8 +52,10 @@ import org.knime.core.data.RowKey;
 /**
  * Defines some constants commonly used when writing {@link Buffer} files.
  * @author Bernd Wiswedel, University of Konstanz
+ * @noextend This class is not intended to be subclassed by clients.
+ * @noreference This class is not intended to be referenced by clients.
  */
-interface KNIMEStreamConstants {
+public interface KNIMEStreamConstants {
 
     /** The key being returned by a {@link NoKeyBuffer}. */
     static final RowKey DUMMY_ROW_KEY = new RowKey("non-existing");

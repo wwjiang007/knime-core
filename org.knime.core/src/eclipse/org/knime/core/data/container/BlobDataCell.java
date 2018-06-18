@@ -147,8 +147,9 @@ public abstract class BlobDataCell extends DataCell {
     }
 
     /** Utility class that holds information where the blob is located.
-     * This contains: bufferID, column index, index of blob in the column. */
-    static final class BlobAddress implements Serializable {
+     * This contains: bufferID, column index, index of blob in the column.
+     * @noreference This class is not intended to be referenced by clients. */
+    public static final class BlobAddress implements Serializable {
 
         private static final long serialVersionUID = -6278793794618726020L;
 
@@ -182,7 +183,7 @@ public abstract class BlobDataCell extends DataCell {
          * @return The ID of the Buffer which takes responsibility to
          * serialize out this object
          */
-        int getBufferID() {
+        public int getBufferID() {
             return m_bufferID;
         }
 
@@ -216,7 +217,7 @@ public abstract class BlobDataCell extends DataCell {
          * @param output To write to.
          * @throws IOException If that fails for any reason.
          */
-        void serialize(final DataOutput output) throws IOException {
+        public void serialize(final DataOutput output) throws IOException {
             output.writeInt(m_bufferID);
             output.writeInt(m_column);
             output.writeInt(m_indexOfBlobInColumn);
@@ -229,7 +230,7 @@ public abstract class BlobDataCell extends DataCell {
          * @return A new blob instance.
          * @throws IOException If that fails.
          */
-        static BlobAddress deserialize(final DataInput input)
+        public static BlobAddress deserialize(final DataInput input)
             throws IOException {
             int bufferID = input.readInt();
             int column = input.readInt();

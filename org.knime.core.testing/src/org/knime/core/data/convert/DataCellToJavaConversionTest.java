@@ -377,4 +377,44 @@ public class DataCellToJavaConversionTest {
             IntValue.class, factories.stream().findFirst().get().getSourceType());
     }
 
+    /**
+     * Test that the converter framework always returns preferred converters first.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testPreferredJavaType() throws Exception {
+        Optional<Class<?>> cell = DataCellToJavaConverterRegistry.getInstance().getPreferredJavaTypeForCell(IntCell.TYPE);
+        assertTrue(cell.isPresent());
+        assertEquals(Integer.class, cell.get());
+
+        cell = DataCellToJavaConverterRegistry.getInstance().getPreferredJavaTypeForCell(LongCell.TYPE);
+        assertTrue(cell.isPresent());
+        assertEquals(Long.class, cell.get());
+
+        cell = DataCellToJavaConverterRegistry.getInstance().getPreferredJavaTypeForCell(StringCell.TYPE);
+        assertTrue(cell.isPresent());
+        assertEquals(String.class, cell.get());
+
+        cell = DataCellToJavaConverterRegistry.getInstance().getPreferredJavaTypeForCell(BinaryObjectDataCell.TYPE);
+        assertTrue(cell.isPresent());
+        assertEquals(InputStream.class, cell.get());
+    }
+
+    @Test
+    public void testIdentifiers() {
+        {
+            Optional<DataCellToJavaConverterFactory<? extends DataValue, String>> factory = DataCellToJavaConverterRegistry.getInstance().getConverterFactories(StringCell.TYPE, String.class).stream().filter(f -> f.getName().equals("String")).findFirst();
+            assertTrue(factory.isPresent());
+            assertEquals("org.knime.core.data.convert.java.SimpleDataCellToJavaConverterFactory(StringValue,class java.lang.String,String)", factory.get().getIdentifier());
+        }
+        {
+            Optional<DataCellToJavaConverterFactory<? extends DataValue, String>> factory = DataCellToJavaConverterRegistry.getInstance().getConverterFactories(StringCell.TYPE, String.class).stream().filter(f -> f.getName().equals("String (toString())")).findFirst();
+            assertTrue(factory.isPresent());
+            assertEquals("org.knime.core.data.convert.java.SimpleDataCellToJavaConverterFactory(DataValue,class java.lang.String,String (toString()))", factory.get().getIdentifier());
+        }
+
+        assertTrue(DataCellToJavaConverterRegistry.getInstance().getFactory("org.knime.core.data.convert.java.SimpleDataCellToJavaConverterFactory(StringValue,class java.lang.String,String)").isPresent());
+        assertTrue(DataCellToJavaConverterRegistry.getInstance().getFactory("org.knime.core.data.convert.java.SimpleDataCellToJavaConverterFactory(DataValue,class java.lang.String,String (toString()))").isPresent());
+    }
 }

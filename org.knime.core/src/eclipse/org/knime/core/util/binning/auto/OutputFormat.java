@@ -1,11 +1,3 @@
-package org.knime.base.node.jsnippet.ui;
-
-import static org.junit.Assert.assertEquals;
-
-import java.util.Arrays;
-
-import org.junit.Test;
-
 /*
  * ------------------------------------------------------------------------
  *
@@ -52,53 +44,50 @@ import org.junit.Test;
  * ---------------------------------------------------------------------
  *
  * History
- *   17.10.2016 (Jonathan Hale): created
+ *   Jun 01, 2018 (Mor Kalla): created
  */
+package org.knime.core.util.binning.auto;
 
 /**
- * Test for {@link FilterableListModel}.
+ * The format of output decimals.
+ * <ul>
+ * <li>{@link #STANDARD}</li>
+ * <li>{@link #PLAIN}</li>
+ * <li>{@link #ENGINEERING}</li>
+ * </ul>
  *
- * @author Jonathan Hale
+ * @author Mor Kalla
+ * @since 3.6
  */
-public class FilterableListModelTest {
+public enum OutputFormat {
+        /**
+         * Standard formatting.
+         */
+        STANDARD("Standard String"),
+
+        /**
+         * Plain number formatting.
+         */
+        PLAIN("Plain String (no exponent)"),
+
+        /**
+         * Engineering formatting.
+         */
+        ENGINEERING("Engineering String");
+
+    private String m_label;
 
     /**
+     * Constructs a {@link OutputFormat} object with a given label.
+     *
+     * @param label the label shown in the dialog
      */
-    @Test
-    public void testAddBundle() {
-        /* Test filtering in BundleListModel */
-        final FilterableListModel model =
-            new FilterableListModel(Arrays.asList("a", "ab", "b", "abc", "c"));
-        assertEquals(5, model.getSize());
+    OutputFormat(final String label) {
+        m_label = label;
+    }
 
-        /* Test filtering by "c" yields two results */
-        model.setFilter("c");
-        assertEquals(model.getSize(), 2);
-        assertEquals(model.getElementAt(0), "abc");
-        assertEquals(model.getElementAt(1), "c");
-
-        /* Test incremental filtering */
-        model.setFilter("a");
-        assertEquals(model.getSize(), 3);
-        assertEquals(model.getElementAt(0), "a");
-        assertEquals(model.getElementAt(1), "ab");
-        assertEquals(model.getElementAt(2), "abc");
-
-        model.setFilter("ab");
-        assertEquals(model.getSize(), 2);
-        assertEquals(model.getElementAt(0), "ab");
-        assertEquals(model.getElementAt(1), "abc");
-
-        /* Test clearing the filter */
-        model.setFilter("");
-        assertEquals(model.getSize(), 5);
-
-        /* Test explicit exclusion */
-        model.setExcluded(new String[]{"a", "ab", "b", "c"});
-        assertEquals(model.getSize(), 1);
-        assertEquals(model.getElementAt(0), "abc");
-
-        model.setExcluded(new String[0]);
-        assertEquals(model.getSize(), 5);
+    @Override
+    public String toString() {
+        return m_label;
     }
 }

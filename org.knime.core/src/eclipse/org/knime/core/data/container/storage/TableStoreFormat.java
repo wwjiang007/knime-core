@@ -66,6 +66,17 @@ import org.knime.core.node.NodeSettingsRO;
  */
 public interface TableStoreFormat {
 
+    /**
+     * Sub element in config that keeps the list of cell class information (used to be a plain array).
+     */
+    static final String CFG_CELL_CLASSES = "table.datacell.classes";
+
+    /** Class name of data cell. */
+    static final String CFG_CELL_SINGLE_CLASS = "class";
+
+    /** Element type if a cell represents a collection. */
+    static final String CFG_CELL_SINGLE_ELEMENT_TYPE = "collection.element.type";
+
     /** @return non-blank short name shown in the preference page, e.g. "Default" or "Column Store (Apache XYZ)".*/
     public String getName();
 
@@ -117,5 +128,21 @@ public interface TableStoreFormat {
     public AbstractTableStoreReader createReader(final File binFile, final DataTableSpec spec,
         final NodeSettingsRO settings, final Map<Integer, ContainerTable> tblRep, int version,
         boolean isReadRowKey) throws IOException, InvalidSettingsException;
+
+    /**
+     * The (internal) version used to write the format. The value is {@link #validateVersion(String) validated} during
+     * reading.
+     *
+     * @return the version string that is persisted
+     */
+    public String getVersion();
+
+    /**
+     * Validates the version string that was saved along with the data.
+     *
+     * @param versionString The non-null version
+     * @return true if the version is 'known' and readable, false otherwise.
+     */
+    public boolean validateVersion(final String versionString);
 
 }

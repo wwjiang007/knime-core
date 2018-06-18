@@ -45,6 +45,8 @@
 package org.knime.core.ui.node.workflow;
 
 import org.knime.core.node.port.PortObject;
+import org.knime.core.node.port.PortObjectSpec;
+import org.knime.core.node.workflow.FlowObjectStack;
 import org.knime.core.node.workflow.NodeContainerState;
 import org.knime.core.node.workflow.NodeContainerStateObservable;
 import org.knime.core.node.workflow.NodeOutPort;
@@ -67,20 +69,20 @@ import org.knime.core.ui.UI;
  */
 public interface NodeOutPortUI extends NodePortUI, NodeStateChangeListener, NodeContainerStateObservable, UI {
 
-//    /**
-//     * Returns the <code>DataTableSpec</code> or null if not available.
-//     *
-//     * @return The <code>DataTableSpec</code> for this port.
-//     */
-//    public PortObjectSpec getPortObjectSpec();
-//
-//    /**
-//     * Returns the DataTable for this port, as set by the node this port is
-//     * output for.
-//     *
-//     * @return PortObject the object for this port. Can be null.
-//     */
-//    public PortObject getPortObject();
+    /**
+     * Returns the <code>DataTableSpec</code> or null if not available.
+     *
+     * @return The <code>DataTableSpec</code> for this port.
+     */
+    public PortObjectSpec getPortObjectSpec();
+
+    /**
+     * Returns the DataTable for this port, as set by the node this port is
+     * output for.
+     *
+     * @return PortObject the object for this port. Can be null.
+     */
+    public PortObject getPortObject();
 
     /** Get summary of the underlying port object as provided by
      * {@link PortObject#getSummary()}. It's a separate method since calling
@@ -119,12 +121,12 @@ public interface NodeOutPortUI extends NodePortUI, NodeStateChangeListener, Node
 //     */
 //    public HiLiteHandler getHiLiteHandler();
 
-//    /**
-//     * Returns the {@link FlowObjectStack} of the underlying node.
-//     *
-//     * @return the flow obj stack container
-//     */
-//    public FlowObjectStack getFlowObjectStack();
+    /**
+     * Returns the {@link FlowObjectStack} of the underlying node.
+     *
+     * @return the flow obj stack container
+     */
+    public FlowObjectStack getFlowObjectStack();
 
 //    /**
 //     * Opens the port view for this port with the given name.

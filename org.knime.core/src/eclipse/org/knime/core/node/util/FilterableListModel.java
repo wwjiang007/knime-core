@@ -1,188 +1,100 @@
-/*
- * ------------------------------------------------------------------------
- *  Copyright by KNIME AG, Zurich, Switzerland
- *  Website: http://www.knime.com; Email: contact@knime.com
- *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License, Version 3, as
- *  published by the Free Software Foundation.
- *
- *  This program is distributed in the hope that it will be useful, but
- *  WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, see <http://www.gnu.org/licenses>.
- *
- *  Additional permission under GNU GPL version 3 section 7:
- *
- *  KNIME interoperates with ECLIPSE solely via ECLIPSE's plug-in APIs.
- *  Hence, KNIME and ECLIPSE are both independent programs and are not
- *  derived from each other. Should, however, the interpretation of the
- *  GNU GPL Version 3 ("License") under any applicable laws result in
- *  KNIME and ECLIPSE being a combined program, KNIME AG herewith grants
- *  you the additional permission to use and propagate KNIME together with
- *  ECLIPSE with only the license terms in place for ECLIPSE applying to
- *  ECLIPSE and the GNU GPL Version 3 applying for KNIME, provided the
- *  license terms of ECLIPSE themselves allow for the respective use and
- *  propagation of ECLIPSE together with KNIME.
- *
- *  Additional permission relating to nodes for KNIME that extend the Node
- *  Extension (and in particular that are based on subclasses of NodeModel,
- *  NodeDialog, and NodeView) and that only interoperate with KNIME through
- *  standard APIs ("Nodes"):
- *  Nodes are deemed to be separate and independent programs and to not be
- *  covered works.  Notwithstanding anything to the contrary in the
- *  License, the License does not apply to Nodes, you are not required to
- *  license Nodes under the License, and you are granted a license to
- *  prepare and propagate Nodes, in each case even if such Nodes are
- *  propagated with or for interoperation with KNIME.  The owner of a Node
- *  may freely choose the license terms applicable to such Node, including
- *  when such Node is propagated with or for interoperation with KNIME.
- * ---------------------------------------------------------------------
- *
- * Created on 03.12.2013 by NanoTec
- */
 package org.knime.core.node.util;
 
-import javax.swing.DefaultListModel;
-import javax.swing.ListModel;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
+
+import javax.swing.AbstractListModel;
 
 /**
- * A {@link ListModel} which provides a view on a subset of the model. The view can be created by
- * {@link #filterIndices(int[])} and reset by {@link #showAll()}.
+ * List model which filters its items according to a search string and considers a list of excluded items.
  *
- * @author Marcel Hanser, University of Konstanz
- * @since 2.10
+ * @author Jonathan Hale, KNIME GmbH, Konstanz, Germany
+ * @since 3.6
  */
-final class FilterableListModel extends DefaultListModel {
+public final class FilterableListModel extends AbstractListModel<String> {
 
     private static final long serialVersionUID = 1L;
 
-    private final DefaultListModel m_originalObjects;
+    private final List<String> m_unfiltered;
 
-    private boolean m_filtered = false;
+    private List<String> m_filtered;
+
+    private Collection<String> m_excluded = Collections.emptyList();
+
+    /* Filter string, only ever null to force refiltering */
+    private String m_filter = "";
 
     /**
+     * Constructor
      *
+     * @param unfiltered Unfiltered list of elements
      */
-    public FilterableListModel() {
-        super();
-        this.m_originalObjects = new DefaultListModel();
+    public FilterableListModel(final List<String> unfiltered) {
+        m_filtered = m_unfiltered = unfiltered;
+    }
+
+    @Override
+    public int getSize() {
+        return m_filtered.size();
+    }
+
+    @Override
+    public String getElementAt(final int index) {
+        return m_filtered.get(index);
     }
 
     /**
-     * Creates a view containing the elements defined by the given index array of the original added elements.
+     * Set the string with which to filter the elements of this list.
      *
-     * @param indices the indices to show
+     * @param filter Filter string
      */
-    public void filterIndices(final int[] indices) {
-        super.clear();
-        m_filtered = true;
-        for (int i : indices) {
-            super.addElement(m_originalObjects.get(i));
+    public synchronized void setFilter(final String filter) {
+        if (m_filter != null && m_filter.equals(filter)) {
+            return;
         }
-    }
-
-    /**
-     * Resets the view.
-     */
-    public void showAll() {
-        super.clear();
-        m_filtered = false;
-        for (int i = 0; i < m_originalObjects.size(); i++) {
-            super.addElement(m_originalObjects.get(i));
+        if (m_filter != null && filter.startsWith(m_filter)) {
+            // the most common use case will be a list gradually refined by user typing more characters
+            m_filtered = m_filtered.stream().filter(s -> s.contains(filter)).collect(Collectors.toList());
+        } else if (filter.isEmpty()) {
+            // copy the full list
+            m_filtered = new ArrayList<>(m_unfiltered);
+        } else {
+            m_filtered = m_unfiltered.stream().filter(s -> s.contains(filter)).collect(Collectors.toList());
         }
+        m_filter = filter;
+        m_filtered.removeAll(m_excluded);
+        this.fireContentsChanged(this, 0, m_unfiltered.size());
     }
 
     /**
-     * @return the original model containing all elements
+     * Set list of excluded elements. Will cause the list to be refiltered.
+     *
+     * @param list Collection of elements to exclude.
      */
-    public ListModel getUnfilteredModel() {
-        return m_originalObjects;
+    public synchronized void setExcluded(final String[] list) {
+        setExcluded(Arrays.asList(list));
     }
 
     /**
-     * {@inheritDoc}
+     * Set list of excluded elements. Will cause the list to be refiltered.
+     *
+     * @param list Collection of elements to exclude.
      */
-    @Override
-    public void clear() {
-        super.clear();
-        m_originalObjects.clear();
+    public synchronized void setExcluded(final Collection<String> list) {
+        m_excluded = list;
+        final String filter = m_filter;
+        m_filter = null;
+        setFilter(filter);
     }
 
     /**
-     * {@inheritDoc}
+     * @return Currently excluded elements
      */
-    @Override
-    public void removeElementAt(final int index) {
-        checkUnfiltered();
-        super.removeElementAt(index);
-        m_originalObjects.removeElementAt(index);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void addElement(final Object obj) {
-        super.addElement(obj);
-        m_originalObjects.addElement(obj);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public boolean removeElement(final Object obj) {
-        super.removeElement(obj);
-        return m_originalObjects.removeElement(obj);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void removeAllElements() {
-        super.removeAllElements();
-        m_originalObjects.removeAllElements();
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void add(final int index, final Object element) {
-        checkUnfiltered();
-        super.add(index, element);
-        m_originalObjects.add(index, element);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public Object remove(final int index) {
-        checkUnfiltered();
-        super.remove(index);
-        return m_originalObjects.remove(index);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void removeRange(final int fromIndex, final int toIndex) {
-        checkUnfiltered();
-        super.removeRange(fromIndex, toIndex);
-        m_originalObjects.removeRange(fromIndex, toIndex);
-    }
-
-    private void checkUnfiltered() {
-        if (m_filtered) {
-            throw new IllegalStateException(
-                "Managing the filtered model with indices while it is filtered leads to unexpected behavior");
-        }
+    public Collection<String> getExcluded() {
+        return Collections.unmodifiableCollection(m_excluded);
     }
 }

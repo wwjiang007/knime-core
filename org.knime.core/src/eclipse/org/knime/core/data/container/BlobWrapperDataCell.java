@@ -67,6 +67,8 @@ import org.knime.core.node.NodeLogger;
  * the framework will write the underlying blob to a dedicated file and
  * internally link to this blob file. The blob object itself can be garbage
  * collected and will silently re-instantiated if accessed.
+ *
+ * @noreference This class is not intended to be referenced by clients.
  * @author Bernd Wiswedel, University of Konstanz
  */
 public final class BlobWrapperDataCell extends DataCell {
@@ -107,7 +109,7 @@ public final class BlobWrapperDataCell extends DataCell {
      * @param ba Its address.
      * @param cl The class information of the blob.
      */
-    BlobWrapperDataCell(final Buffer b, final BlobAddress ba,
+    public BlobWrapperDataCell(final Buffer b, final BlobAddress ba,
             final CellClassInfo cl) {
         this(b, ba, cl, null);
     }
@@ -180,7 +182,7 @@ public final class BlobWrapperDataCell extends DataCell {
     }
 
     /** @return The blob address. */
-    BlobAddress getAddress() {
+    public BlobAddress getAddress() {
         // the blob address of the contained cell might already be assigned
         // but this blob address not:
         // the BlobDataCell is contained in another wrapper (added twice to
@@ -203,7 +205,7 @@ public final class BlobWrapperDataCell extends DataCell {
     }
 
     /** @return Class info to the blob. */
-    CellClassInfo getBlobClassInfo() {
+    public CellClassInfo getBlobClassInfo() {
         return m_blobClass;
     }
 
