@@ -115,7 +115,10 @@ final class ZoomWheelListener implements MouseWheelListener {
         Display.getCurrent().asyncExec(() -> {
             try {
                 ZoomWheelListener outer = ZoomWheelListener.this;
-
+                if (outer.m_figureCanvas.isDisposed()) {
+                    // this otherwise causes a "widget disposed" while removing the mouse listener
+                    return;
+                }
                 outer.m_figureCanvas.removeMouseWheelListener(this);
             } catch (Exception e) {
                 // canvas has likely already gone.

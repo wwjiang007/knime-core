@@ -60,9 +60,13 @@ import org.eclipse.swt.events.KeyListener;
 import org.eclipse.swt.events.MouseEvent;
 import org.eclipse.swt.events.MouseListener;
 import org.eclipse.swt.events.MouseMoveListener;
+import org.eclipse.swt.widgets.Display;
 import org.knime.core.node.workflow.ConnectionContainer;
 import org.knime.core.node.workflow.ConnectionID;
 import org.knime.core.node.workflow.NodeID;
+import org.knime.core.node.workflow.SingleNodeContainer;
+import org.knime.core.node.workflow.WorkflowEvent;
+import org.knime.core.node.workflow.WorkflowListener;
 import org.knime.core.node.workflow.WorkflowManager;
 import org.knime.core.ui.node.workflow.NodeContainerUI;
 import org.knime.workbench.editor2.commands.SupplantationCommand;
@@ -79,7 +83,7 @@ import org.knime.workbench.editor2.editparts.NodeContainerEditPart;
  *
  * @author loki der quaeler
  */
-public class NodeSupplantDragListener implements KeyListener, MouseListener, MouseMoveListener {
+public class NodeSupplantDragListener implements KeyListener, MouseListener, MouseMoveListener, WorkflowListener {
     // These will only be consulted from the SWT thread
     private NodeContainerEditPart m_nodeInDrag;
     private int[] m_mouseDownNodeBounds;
@@ -148,15 +152,17 @@ public class NodeSupplantDragListener implements KeyListener, MouseListener, Mou
     }
 
     private void endDragTracking() {
-        m_nodeInDrag = null;
-        m_mouseDownNodeBounds = null;
-        m_nodeInDragConnectionIds = null;
-        m_nodeInDragDegreeOneNodes = null;
-        m_nodeInDragInportManifest = null;
-        m_nodeInDragOutportManifest = null;
+        if (m_nodeInDrag != null) {
+            m_nodeInDrag = null;
+            m_mouseDownNodeBounds = null;
+            m_nodeInDragConnectionIds = null;
+            m_nodeInDragDegreeOneNodes = null;
+            m_nodeInDragInportManifest = null;
+            m_nodeInDragOutportManifest = null;
 
-        m_dragPositionProcessor.unmarkSelection();
-        m_dragPositionProcessor.clearMarkingAvoidance();
+            m_dragPositionProcessor.unmarkSelection();
+            m_dragPositionProcessor.clearMarkingAvoidance();
+        }
     }
 
     /**
@@ -181,7 +187,13 @@ public class NodeSupplantDragListener implements KeyListener, MouseListener, Mou
     @Override
     public void mouseMove(final MouseEvent me) {
         if (m_nodeInDrag != null) {
-            m_dragPositionProcessor.processDragEventAtPoint(me.display.getCursorLocation());
+            final boolean mouseDown = ((me.stateMask & SWT.BUTTON1) != 0);
+
+            if (mouseDown) {
+                m_dragPositionProcessor.processDragEventAtPoint(me.display.getCursorLocation());
+            } else {
+                endDragTracking();  // See AP-9560
+            }
         }
     }
 
@@ -189,7 +201,13 @@ public class NodeSupplantDragListener implements KeyListener, MouseListener, Mou
      * {@inheritDoc}
      */
     @Override
-    public void mouseDoubleClick(final MouseEvent me) { }
+    public void mouseDoubleClick(final MouseEvent me) {
+        // See AP-9560
+        // we're going to give everything a handful of milliseconds to settle their stuff out and then end the tracking
+        Display.getDefault().asyncExec(() -> {
+            endDragTracking();
+        });
+    }
 
     /**
      * {@inheritDoc}
@@ -265,6 +283,33 @@ public class NodeSupplantDragListener implements KeyListener, MouseListener, Mou
             }
         } finally {
             endDragTracking();
+        }
+    }
+
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void workflowChanged(final WorkflowEvent we) {
+        switch (we.getType()) {
+            case NODE_REMOVED:
+                if ((m_nodeInDrag != null) && we.getOldValue() != null) {
+                    final Object o = we.getOldValue();
+
+                    if (o instanceof SingleNodeContainer) {
+                        final NodeID removedNodeId = ((SingleNodeContainer)o).getID();
+
+                        if ((removedNodeId != null) && removedNodeId.equals(m_nodeInDrag.getNodeContainer().getID())) {
+                            Display.getDefault().asyncExec(() -> {
+                                endDragTracking();
+                            });
+                        }
+                    }
+                }
+
+                break;
+            default:
         }
     }
 

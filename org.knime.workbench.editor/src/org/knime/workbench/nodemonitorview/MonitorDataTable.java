@@ -174,6 +174,12 @@ public class MonitorDataTable implements NodeMonitorTable {
             column = new TableColumn(table, SWT.NONE);
             column.setText("(remaining columns skipped)");
         }
+
+        //needs to be added before calling 'setItemCount'
+        //- first items will be empty otherwise
+        m_addDataRowListener = new AddDataRowListener();
+        table.addListener(SWT.SetData, m_addDataRowListener);
+
         if (m_autoLoad) {
             table.setItemCount(Math.min((int)m_numRows, NUM_LOOK_AHEAD_ROWS));
         } else {
@@ -182,8 +188,6 @@ public class MonitorDataTable implements NodeMonitorTable {
         for (int i = 0; i < table.getColumnCount(); i++) {
             table.getColumn(i).pack();
         }
-        m_addDataRowListener = new AddDataRowListener();
-        table.addListener(SWT.SetData, m_addDataRowListener);
     }
 
     /**
@@ -192,9 +196,9 @@ public class MonitorDataTable implements NodeMonitorTable {
     @Override
     public void updateControls(final Button loadButton, final Combo portCombo, final int count) {
         if (count == 0) {
-            loadButton.setText("Load rows");
+            loadButton.setText("Show rows");
         } else {
-            loadButton.setText("Load more rows");
+            loadButton.setText("Show more rows");
         }
         if (m_numLoadedRows == m_numRows) {
             loadButton.setEnabled(false);

@@ -323,8 +323,6 @@ public class WorkflowEditor extends GraphicalEditor implements
 
     private NodeSupplantDragListener m_nodeSupplantDragListener;
 
-    private WorkflowCanvasExpander m_workflowCanvasExpander;
-
     /** path to the workflow directory (that contains the workflow.knime file). */
     private URI m_fileResource;
 
@@ -552,9 +550,6 @@ public class WorkflowEditor extends GraphicalEditor implements
         }
         if (m_nodeSupplantDragListener != null) {
             m_nodeSupplantDragListener.dispose();
-        }
-        if (m_workflowCanvasExpander != null) {
-            m_workflowCanvasExpander.dispose();
         }
         if (m_fileResource != null && m_manager != null) {
             // disposed is also called when workflow load fails or is canceled
@@ -937,10 +932,8 @@ public class WorkflowEditor extends GraphicalEditor implements
         m_zoomWheelListener = new ZoomWheelListener(zm, (FigureCanvas)getViewer().getControl());
 
         m_nodeSupplantDragListener = new NodeSupplantDragListener(this);
-
-        m_workflowCanvasExpander = new WorkflowCanvasExpander(getGraphicalViewer());
         if (m_manager != null) {
-            m_manager.addListener(m_workflowCanvasExpander);
+            m_manager.addListener(m_nodeSupplantDragListener);
         }
     }
 
@@ -2305,8 +2298,8 @@ public class WorkflowEditor extends GraphicalEditor implements
             if (!m_refresher.isConnected() && m_refresher.isJobEditEnabled()) {
                 sb.setLength(0);
                 sb.append(
-                    "Connection to server lost. Job will not refresh, and no changes can be made until connection is"
-                        + " restored.");
+                    "Server not responding, either the server is overloaded or the connection is lost. Job will not "
+		        + " refresh and no changes can be made until connection is restored.");
                 workflowFigure.setErrorMessage(sb.toString());
             } else {
                 workflowFigure.setErrorMessage(null);
@@ -3201,8 +3194,8 @@ public class WorkflowEditor extends GraphicalEditor implements
         }
         if (m_manager != null) {
             m_manager.removeListener(this);
-            if (m_workflowCanvasExpander != null) {
-                m_manager.removeListener(m_workflowCanvasExpander);
+            if (m_nodeSupplantDragListener != null) {
+                m_manager.removeListener(m_nodeSupplantDragListener);
             }
             m_manager.removeNodePropertyChangedListener(this);
             m_manager.removeNodeStateChangeListener(this);
@@ -3211,8 +3204,8 @@ public class WorkflowEditor extends GraphicalEditor implements
         m_manager = manager;
         if (m_manager != null) {
             m_manager.addListener(this);
-            if (m_workflowCanvasExpander != null) {
-                m_manager.addListener(m_workflowCanvasExpander);
+            if (m_nodeSupplantDragListener != null) {
+                m_manager.addListener(m_nodeSupplantDragListener);
             }
             m_manager.addNodePropertyChangedListener(this);
             m_manager.addNodeStateChangeListener(this);
