@@ -53,6 +53,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -107,6 +108,17 @@ import org.knime.core.node.streamable.StreamableOperatorInternals;
  * @author Mark Ortmann, KNIME GmbH, Berlin, Germany
  */
 public final class NumericOutliersReviser {
+
+    /**
+     * The supported data types. The data types are restricted, since we have to create new cells, see
+     * {@link #getTreatedCell(DataCell, double)}, of the same type as the input column.
+     */
+    private static final Set<DataType> SUPPORTED_DATA_TYPES =
+        new HashSet<DataType>(Arrays.asList(new DataType[]{LongCell.TYPE, IntCell.TYPE, DoubleCell.TYPE}));
+
+    /** The illegal cell type exception. */
+    private static final String ILLEGAL_CELL_TYPE_EXCEPTION =
+        "Only cells of type double, integer, and long are supported";
 
     /** Outlier treatment and output generation routine message. */
     private static final String TREATMENT_MSG = "Treating outliers and generating output";
@@ -233,6 +245,16 @@ public final class NumericOutliersReviser {
         m_detectionOption = b.m_detectionOption;
         m_updateDomain = b.m_updateDomain;
         m_listeners = new LinkedList<NumericOutlierWarningListener>();
+    }
+
+    /**
+     * Tells whether or not the provided {@link DataType} is supported.
+     *
+     * @param type the data type to be evaluated
+     * @return {@code True} if the provided {@link DataType} is supported
+     */
+    public static boolean supports(final DataType type) {
+        return SUPPORTED_DATA_TYPES.contains(type);
     }
 
     /**
@@ -404,6 +426,9 @@ public final class NumericOutliersReviser {
      */
     private void treatOutliers(final ExecutionContext exec, final RowInput in, final RowOutput out,
         final NumericOutliersModel outlierModel, final long rowCount, final boolean inStreamingMode) throws Exception {
+        // check the outlier column type compatibility
+        checkOutlierCompatibility(in.getDataTableSpec(), outlierModel.getOutlierColNames());
+
         // start the treatment step
         exec.setMessage(TREATMENT_MSG);
 
@@ -448,6 +473,20 @@ public final class NumericOutliersReviser {
         }
         // cleare some memory
         m_outlierColNames = null;
+    }
+
+    /**
+     * Checks if all outlier column types are supported.
+     *
+     * @param inSpec the input data table spec
+     * @param outlierColNames the outlier column names
+     */
+    private static void checkOutlierCompatibility(final DataTableSpec inSpec, final String[] outlierColNames) {
+        if (!Arrays.stream(outlierColNames)//
+            .map(c -> inSpec.getColumnSpec(c).getType())//
+            .allMatch(NumericOutliersReviser::supports)) {
+            throw new IllegalArgumentException(ILLEGAL_CELL_TYPE_EXCEPTION);
+        }
     }
 
     /**
@@ -502,7 +541,8 @@ public final class NumericOutliersReviser {
                             // increment the member counter
                             memberCounter.incrementMemberCount(outlierColName, key);
                             // treat the value of the cell if its a outlier
-                            treatedCell = treatCellValue(colsMap.get(outlierColName), curCell);
+                            treatedCell =
+                                treatCellValue(colsMap.get(outlierColName), outlierSpecs[i].getType(), curCell);
                         } else {
                             missingGroupsCounter.incrementMemberCount(outlierColName, key);
                             treatedCell = curCell;
@@ -552,20 +592,34 @@ public final class NumericOutliersReviser {
      * strategy.
      *
      * @param interval the permitted interval
+     * @param colType the data type of the column storing the cell
      * @param cell the the current data cell
      * @return the new data cell after replacing its value if necessary
      */
-    private DataCell treatCellValue(final double[] interval, final DataCell cell) {
+    private DataCell treatCellValue(final double[] interval, final DataType colType, final DataCell cell) {
         // the model might not have learned anything about this key
         if (interval == null) {
             return cell;
         }
+
+        // If the cell is of type long casting it to double value can cause precision problems, e.g.:
+        // final long a = -5307351023624618796l;
+        // final long b = (long)((double)a);
+        // > a : -5307351023624618796
+        // > b : -5307351023624619008
+        // Since the permitted interval is a double array this conversion is necessary (keep in mind that it is
+        // also deterministic). However, if we do not change the value, i.e., the cell is not an outlier, we
+        // return the original cell otherwise we have to create a new cell (see #getTreatedCell).
+        // In the latter case we cannot overcome the precision problem. Anyway, the intervals were also
+        // calculated by casting the long value to double!
         double val = ((DoubleValue)cell).getDoubleValue();
-        // checks if the value is an outlier
-        if (m_repStrategy == NumericOutliersReplacementStrategy.MISSING && isOutlier(interval, val)) {
-            return DataType.getMissingCell();
+
+        // treat cell according the selected replacement strategy
+        if (m_repStrategy == NumericOutliersReplacementStrategy.MISSING) {
+            return isOutlier(interval, val) ? DataType.getMissingCell() : cell;
         }
-        if (cell.getType() == DoubleCell.TYPE) {
+
+        if (colType.equals(DoubleCell.TYPE)) {
             // sets to the lower interval bound if necessary
             if (m_detectionOption == NumericOutliersDetectionOption.LOWER_BOUND
                 || m_detectionOption == NumericOutliersDetectionOption.ALL) {
@@ -576,7 +630,6 @@ public final class NumericOutliersReviser {
                 || m_detectionOption == NumericOutliersDetectionOption.ALL) {
                 val = Math.min(val, interval[1]);
             }
-            return DoubleCellFactory.create(val);
         } else {
             // sets to the lower interval bound if necessary
             // to the smallest integer inside the permitted interval
@@ -591,17 +644,38 @@ public final class NumericOutliersReviser {
                 val = Math.min(val, Math.floor(interval[1]));
             }
             // return the proper DataCell
-            if (cell.getType() == LongCell.TYPE) {
-                return LongCellFactory.create((long)val);
-            }
-            return IntCellFactory.create((int)val);
         }
+        return getTreatedCell(colType, cell, val);
     }
 
     /**
-     * @param interval
-     * @param val
-     * @return
+     * Returns the treated cell.
+     *
+     * @param colType the data type of the column storing the cell
+     * @param cell the data cell
+     * @param val the new value of this cell
+     * @return a new data cell if the cell's value is different from the new value
+     */
+    private static DataCell getTreatedCell(final DataType colType, final DataCell cell, final double val) {
+        final double prevVal = ((DoubleValue)cell).getDoubleValue();
+        if (prevVal == val) {
+            return cell;
+        } else if (colType.equals(DoubleCell.TYPE)) {
+            return DoubleCellFactory.create(val);
+        } else if (colType.equals(LongCell.TYPE)) {
+            return LongCellFactory.create((long)val);
+        } else if (colType.equals(IntCell.TYPE)) {
+            return IntCellFactory.create((int)val);
+        }
+        throw new IllegalArgumentException(ILLEGAL_CELL_TYPE_EXCEPTION);
+    }
+
+    /**
+     * Checks w.r.t. the selected detection option if the value is an outlier or not.
+     *
+     * @param interval the permitted interval
+     * @param val the value to be tested
+     * @return {@code True} if the value is an outlier
      */
     private boolean isOutlier(final double[] interval, final double val) {
         if (val < interval[0] && (m_detectionOption == NumericOutliersDetectionOption.LOWER_BOUND
@@ -978,7 +1052,8 @@ public final class NumericOutliersReviser {
      *
      * @author Mark Ortmann, KNIME GmbH, Berlin, Germany
      */
-    public static final class SummaryInternals extends StreamableOperatorInternals implements NumericOutlierWarningListener {
+    public static final class SummaryInternals extends StreamableOperatorInternals
+        implements NumericOutlierWarningListener {
 
         /** The warnings key. */
         private static final String WARNINGS_KEY = "warnings";
@@ -1087,8 +1162,8 @@ public final class NumericOutliersReviser {
          */
         public void writeTable(final ExecutionContext exec, final RowOutput out)
             throws CanceledExecutionException, InterruptedException {
-            NumericOutliersSummaryTable.writeTable(exec, m_numCols, out, m_outlierModel, m_memberCounter, m_outlierRepCounter,
-                m_missingGroupsCounter);
+            NumericOutliersSummaryTable.writeTable(exec, m_numCols, out, m_outlierModel, m_memberCounter,
+                m_outlierRepCounter, m_missingGroupsCounter);
         }
 
         /**

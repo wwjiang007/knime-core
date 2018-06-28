@@ -194,6 +194,7 @@ import org.knime.workbench.KNIMEEditorPlugin;
 import org.knime.workbench.core.nodeprovider.NodeProvider;
 import org.knime.workbench.core.nodeprovider.NodeProvider.EventListener;
 import org.knime.workbench.core.util.ImageRepository;
+import org.knime.workbench.core.util.ImageRepository.SharedImages;
 import org.knime.workbench.editor2.actions.AbstractNodeAction;
 import org.knime.workbench.editor2.actions.AddAnnotationAction;
 import org.knime.workbench.editor2.actions.CancelAction;
@@ -1338,6 +1339,11 @@ public class WorkflowEditor extends GraphicalEditor implements
         if (oldFileResource != null) {
             ProjectWorkflowMap.replace(m_fileResource, m_manager, oldFileResource);
         }
+
+        if (!Wrapper.wraps(wfm, WorkflowManager.class)) {
+            //set different icon for job view
+            setTitleImage(ImageRepository.getIconImage(SharedImages.ServerJob));
+        }
     }
 
     /** The file store to the argument URI (can be file: or knime:).
@@ -2293,7 +2299,7 @@ public class WorkflowEditor extends GraphicalEditor implements
                     sb.append("\nJob locked for edits. Enable edit operations in the preferences.");
                 }
             }
-            workflowFigure.setWarningMessage(sb.toString());
+            workflowFigure.setInfoMessage(sb.toString());
 
             if (!m_refresher.isConnected() && m_refresher.isJobEditEnabled()) {
                 sb.setLength(0);
