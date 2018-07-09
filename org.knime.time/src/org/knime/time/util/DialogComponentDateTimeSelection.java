@@ -416,7 +416,7 @@ public final class DialogComponentDateTimeSelection extends DialogComponent {
      * {@inheritDoc}
      */
     @Override
-    protected void validateSettingsBeforeSave() throws InvalidSettingsException {
+    public void validateSettingsBeforeSave() throws InvalidSettingsException {
         CheckUtils.checkSettingNotNull(m_dateChooser.getDate(), "Date must be valid and not empty.", new Object[0]);
         updateModel();
     }

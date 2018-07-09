@@ -7968,7 +7968,6 @@ public final class WorkflowManager extends NodeContainer
                 }
             }
             loadResult.addChildError(subResult);
-            loadResult.addMissingNodes(subResult.getMissingNodes());
             // set warning message on node if we have loading errors
             // do this only if these are critical errors or data-load errors,
             // which must be reported.
@@ -9522,6 +9521,30 @@ public final class WorkflowManager extends NodeContainer
      */
     public WorkflowContext getContext() {
         return m_workflowContext;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public boolean isInWizardExecution() {
+        try (WorkflowLock lock = lock()) {
+            NodeContainerParent parent = getDirectNCParent();
+            if (isProject()) {
+                ExecutionController ec = getExecutionController();
+                if (ec instanceof WizardExecutionController) {
+                    //only if the workflow contains subnodes it is considered to be in
+                    //wizard execution
+                    return WebResourceController.hasWizardExecution(this);
+                } else {
+                    return false;
+                }
+            } else {
+                //if not a project workflow, parent should never be null
+                assert parent != null;
+                return parent.isInWizardExecution();
+            }
+        }
     }
 
     /**

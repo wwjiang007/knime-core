@@ -1,5 +1,6 @@
 /*
  * ------------------------------------------------------------------------
+ *
  *  Copyright by KNIME AG, Zurich, Switzerland
  *  Website: http://www.knime.com; Email: contact@knime.com
  *
@@ -42,55 +43,39 @@
  *  when such Node is propagated with or for interoperation with KNIME.
  * ---------------------------------------------------------------------
  *
- * Created on Feb 2, 2014 by wiswedel
+ * History
+ *   Jul 5, 2018 (wiswedel): created
  */
-package org.knime.base.node.mine.treeensemble2.model;
+package org.knime.core.node;
 
-import java.io.DataInputStream;
-import java.io.InputStream;
-
-import org.knime.base.node.mine.treeensemble2.model.TreeEnsembleModel.Version;
+import java.util.Optional;
 
 /**
- * An input stream that carries additional information used during loading.
+ * A extension like a node or a table format, which is prompted for installation when a workflow is loaded in a
+ * vanilla KNIME installation.
  *
  * @author Bernd Wiswedel, KNIME AG, Zurich, Switzerland
+ * @noreference This interface is not intended to be referenced by clients.
  */
-final class TreeModelDataInputStream extends DataInputStream {
-
-    private boolean m_containsClassDistribution;
-
-    private Version m_version;
+public interface KNIMEComponentInformation {
 
     /**
-     * ...
+     * Returns the bundle's symbolic name in which the component is contained.
+     * If the bundle is unknown an empty result is returned.
      *
-     * @param in passed on to super.
+     * @return the bundle's symbolic name
      */
-    TreeModelDataInputStream(final InputStream in) {
-        super(in);
-    }
+    Optional<String> getBundleSymbolicName();
 
     /**
-     * @return the containsClassDistribution
+     * Returns the features's symbolic name in which the component is contained.
+     * If the feature is unknown an empty result is returned.
+     *
+     * @return the feature's symbolic name
      */
-    boolean isContainsClassDistribution() {
-        return m_containsClassDistribution;
-    }
+    Optional<String> getFeatureSymbolicName();
 
-    /**
-     * @param value the containsClassDistribution to set
-     */
-    void setContainsClassDistribution(final boolean value) {
-        m_containsClassDistribution = value;
-    }
-
-    Version getVersion() {
-        return m_version;
-    }
-
-    void setVersion(final Version version) {
-        m_version = version;
-    }
+    /** @return name of the component,for instance the name of the node. Used to display error messages to the user. */
+    String getComponentName();
 
 }

@@ -1,5 +1,6 @@
 /*
  * ------------------------------------------------------------------------
+ *
  *  Copyright by KNIME AG, Zurich, Switzerland
  *  Website: http://www.knime.com; Email: contact@knime.com
  *
@@ -42,55 +43,52 @@
  *  when such Node is propagated with or for interoperation with KNIME.
  * ---------------------------------------------------------------------
  *
- * Created on Feb 2, 2014 by wiswedel
+ * History
+ *   Jul 5, 2018 (wiswedel): created
  */
-package org.knime.base.node.mine.treeensemble2.model;
+package org.knime.core.data.container.storage;
 
-import java.io.DataInputStream;
-import java.io.InputStream;
+import java.util.Optional;
 
-import org.knime.base.node.mine.treeensemble2.model.TreeEnsembleModel.Version;
+import org.knime.core.node.InvalidSettingsException;
+import org.knime.core.node.util.CheckUtils;
 
 /**
- * An input stream that carries additional information used during loading.
+ * Thrown by loading routines in {@link org.knime.core.node.BufferedDataTable} in case the table format is unknown or
+ * not installed. The GUI (if run in UI) will then bring up the installation wizard.
  *
- * @author Bernd Wiswedel, KNIME AG, Zurich, Switzerland
+ * @since 3.6
  */
-final class TreeModelDataInputStream extends DataInputStream {
+@SuppressWarnings("serial")
+public final class TableStoreFormatUnknownException extends InvalidSettingsException {
 
-    private boolean m_containsClassDistribution;
+    private String m_formatFullyQualifiedName;
 
-    private Version m_version;
+    private Optional<TableStoreFormatInformation> m_tableStoreMissingInfo;
 
     /**
-     * ...
+     * Create new exception with the fully qualified class name as stored in the table file (meta.xml).
      *
-     * @param in passed on to super.
+     * @param formatFullyQualifiedName non-null table format class name.
      */
-    TreeModelDataInputStream(final InputStream in) {
-        super(in);
+    public TableStoreFormatUnknownException(final String formatFullyQualifiedName) {
+        super(String.format("Unknown table format %s -- is the extension installed?", formatFullyQualifiedName));
+        m_formatFullyQualifiedName = CheckUtils.checkArgumentNotNull(formatFullyQualifiedName);
+        m_tableStoreMissingInfo = TableStoreFormatInformation.of(formatFullyQualifiedName);
     }
 
     /**
-     * @return the containsClassDistribution
+     * @return the formatFullyQualifiedName Class name of the missing table format, not null.
      */
-    boolean isContainsClassDistribution() {
-        return m_containsClassDistribution;
+    public String getFormatFullyQualifiedName() {
+        return m_formatFullyQualifiedName;
     }
 
     /**
-     * @param value the containsClassDistribution to set
+     * @return the tableStoreMissingInfo if further information are available.
      */
-    void setContainsClassDistribution(final boolean value) {
-        m_containsClassDistribution = value;
-    }
-
-    Version getVersion() {
-        return m_version;
-    }
-
-    void setVersion(final Version version) {
-        m_version = version;
+    public Optional<TableStoreFormatInformation> getTableStoreMissingInfo() {
+        return m_tableStoreMissingInfo;
     }
 
 }

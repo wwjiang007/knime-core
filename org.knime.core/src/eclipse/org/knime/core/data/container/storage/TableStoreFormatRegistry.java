@@ -157,7 +157,9 @@ public final class TableStoreFormatRegistry {
         // experimental ORC/hadoop format as default when running nightlies
         String defaultFormatClassName;
         if (KNIMEConstants.isNightlyBuild()) {
-            defaultFormatClassName = "org.knime.parquet.ParquetTableStoreFormat";
+            defaultFormatClassName = DefaultTableStoreFormat.class.getName();
+            // TODO make this the nightly build default once we're there
+            // defaultFormatClassName = "org.knime.parquet.ParquetTableStoreFormat";
         } else {
             defaultFormatClassName = DefaultTableStoreFormat.class.getName();
         }
@@ -205,10 +207,14 @@ public final class TableStoreFormatRegistry {
     }
 
     /** @param fullyQualifiedClassName class name in question
-     * @return the table format with the given class name - used to restore a previously saved table. */
-    public Optional<TableStoreFormat> getTableStoreFormat(final String fullyQualifiedClassName) {
-        return m_tableStoreFormats.stream()
-                .filter(f -> f.getClass().getName().equals(fullyQualifiedClassName)).findFirst();
+     * @return the table format with the given class name - used to restore a previously saved table.
+     * @throws TableStoreFormatUnknownException If the format is unknown (usually means: not installed) */
+    public TableStoreFormat getTableStoreFormat(final String fullyQualifiedClassName)
+        throws TableStoreFormatUnknownException {
+        return m_tableStoreFormats.stream()//
+                .filter(f -> f.getClass().getName().equals(fullyQualifiedClassName))//
+                .findFirst()//
+                .orElseThrow(() -> new TableStoreFormatUnknownException(fullyQualifiedClassName));
     }
 
     /** {@inheritDoc} */

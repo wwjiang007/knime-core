@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<knimeNode icon="./logistic_regression_learn.png" type="Learner"
-    xmlns="http://knime.org/node/v2.10" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://knime.org/node/v2.10 http://knime.org/node/v2.10.xsd">
+<knimeNode icon="./logistic_regression_learn.png" type="Learner" xmlns="http://knime.org/node/v3.6" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://knime.org/node/v3.6 http://knime.org/node/v3.6.xsd">
     <name>Logistic Regression Learner</name>
     <shortDescription>Performs a multinomial logistic regression.</shortDescription>
     <fullDescription>
@@ -50,7 +48,7 @@
         	<b>Stochastic average gradient (SAG)</b> This solver implements a variant of stochastic gradient descent which tends to
         	converge considerably faster than vanilla stochastic gradient descent. For more information on the algorithm see 
         	the following <a href="https://arxiv.org/abs/1309.2388">paper</a>. It works well for large tables and also tables with
-        	more columns than rows. Note that in the later case a regularization prior other than <i>uniform</i> must be selected.
+        	more columns than rows. Note that in the later case a regularization prior other than "uniform" must be selected.
         	The default learning rate of 0.1 was selected because it often works well but ultimately the optimal learning rate always
         	depends on the data and should be treated as a hyperparameter.
         </li>
@@ -209,7 +207,9 @@
         	The static seed to use. A click on the "New" button generates a new seed.
         </option>
         </tab>
-        	
+		<link href="https://www.knime.com/knime-introductory-course/chapter6/section2/logistic-regression">
+			KNIME E-Learning Course: Logistic Regression
+		</link>
 	</fullDescription>
     <ports>
         <inPort index="0" name="Input data">Table on which to perform regression. The input must not contain missing values, you have to fix them by e.g. using the Missing Values node.</inPort>

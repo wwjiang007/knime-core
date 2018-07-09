@@ -1738,6 +1738,7 @@ public class WorkflowEditor extends GraphicalEditor implements
     public void doSave(final IProgressMonitor monitor) {
         if (isTempRemoteWorkflowEditor()) {
             saveBackToServer();
+            updateWorkflowMessages();
         } else {
             saveTo(m_fileResource, monitor, true, null);
         }
@@ -2269,7 +2270,12 @@ public class WorkflowEditor extends GraphicalEditor implements
      * Places the message at the top of the editor - above all other contents.
      */
     private void updateWorkflowMessages() {
+        if (getViewer() == null) {
+            //do nothing if it hasn't been loaded entirely, yet
+            return;
+        }
         WorkflowFigure workflowFigure = ((WorkflowRootEditPart)getViewer().getRootEditPart().getContents()).getFigure();
+        StringBuilder sb = new StringBuilder();
         if (isTempRemoteWorkflowEditor()) {
             URI origRemoteLocation = m_origRemoteLocation;
             WorkflowEditor parentEditor = m_parentEditor;
@@ -2277,12 +2283,24 @@ public class WorkflowEditor extends GraphicalEditor implements
                 origRemoteLocation = parentEditor.m_origRemoteLocation;
                 parentEditor = parentEditor.m_parentEditor;
             }
-            workflowFigure.setWarningMessage("  This is a temporary copy of \""
-                + URIUtil.toDecodedString(origRemoteLocation)
-                + "\".\n  Use \"Save As...\" to save a permanent copy of the workflow to your local workspace, or a mounted KNIME Server.");
+            String uriString = URIUtil.toDecodedString(origRemoteLocation);
+            sb.append("  This is a temporary copy of \"" + uriString + "\".");
+            if (!(uriString.startsWith("knime://EXAMPLE") || uriString.startsWith("file:/"))) {
+                //"Save"-action only allowed for server-workflows, but not temporary workflows from the example-server nor an external file
+                if (isDirty()) {
+                    sb.append("\n  Use \"Save\" to upload it back to its original location on the server"
+                        + " or \"Save As...\" to store it in a different location.");
+                } else {
+                    sb.append(
+                        "\n  Use \"Save As...\" to store it to your local workspace or a server you are currently logged in.");
+                }
+            } else {
+                sb.append(
+                    "\n  Use \"Save As...\" to save a permanent copy of the workflow to your local workspace, or a mounted KNIME Server.");
+            }
+            workflowFigure.setWarningMessage(sb.toString());
         } else if (!getWorkflowManager().isPresent()) {
             // if the underlying workflow manager is a WorkflowManagerUI instance
-            StringBuilder sb = new StringBuilder();
             if(m_fileResource != null && m_parentEditor == null) {
                 //root workflow
                 sb.append("This is a view on the remote job running on KNIME Server (" + m_fileResource.getAuthority() + ").");
@@ -2310,7 +2328,13 @@ public class WorkflowEditor extends GraphicalEditor implements
             } else {
                 workflowFigure.setErrorMessage(null);
             }
+
+            if (getWorkflowManagerUI().isInWizardExecution()) {
+                workflowFigure.setWarningMessage("Job started by WebPortal. Edit operations are not allowed. "
+                    + "Nodes following the currently active wrapped metanode (WebPortal page) are not executed.");
+            }
         } else {
+            workflowFigure.setInfoMessage(null);
             workflowFigure.setWarningMessage(null);
             workflowFigure.setErrorMessage(null);
         }
@@ -3190,6 +3214,7 @@ public class WorkflowEditor extends GraphicalEditor implements
                 if (m_parentEditor != null) {
                     m_parentEditor.markDirty();
                 }
+                updateWorkflowMessages();
             }
         }
     }

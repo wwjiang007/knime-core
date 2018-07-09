@@ -51,6 +51,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.URL;
+import java.nio.file.Files;
 import java.nio.file.Path;
 
 import org.knime.core.data.DataTableSpec;
@@ -120,7 +121,6 @@ public class WriteTableNodeModel extends NodeModel {
         }
     }
 
-
     /** Config identifier for the settings object. */
     static final String CFG_FILENAME = "filename";
 
@@ -184,14 +184,27 @@ public class WriteTableNodeModel extends NodeModel {
         URL url = FileUtil.toURL(m_fileName.getStringValue());
         Path localPath = FileUtil.resolveToPath(url);
 
-        if (localPath != null) {
-            DataContainer.writeToZip(in, localPath.toFile(), exec);
-        } else {
-            try (OutputStream os = new DeferredOpenOutputStream(url)) {
-                DataContainer.writeToStream(in, os, exec);
+        try {
+            if (localPath != null) {
+                DataContainer.writeToZip(in, localPath.toFile(), exec);
+            } else {
+                try (OutputStream os = new DeferredOpenOutputStream(url)) {
+                    DataContainer.writeToStream(in, os, exec);
+                }
             }
+            return new BufferedDataTable[0];
+        } catch (CanceledExecutionException cee) {
+            if (localPath != null) {
+                try {
+                    Files.delete(localPath);
+                    getLogger().debug("File '" + m_fileName + "' deleted after node has been canceled.");
+                } catch (IOException ex) {
+                    getLogger()
+                        .warn("Unable to delete file '" + m_fileName + "' after cancellation: " + ex.getMessage(), ex);
+                }
+            }
+            throw cee;
         }
-        return new BufferedDataTable[0];
     }
 
     /**
