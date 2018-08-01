@@ -92,7 +92,6 @@ import org.knime.core.node.workflow.AnnotationData;
 import org.knime.core.node.workflow.NodeAnnotation;
 import org.knime.workbench.KNIMEEditorPlugin;
 import org.knime.workbench.core.util.ImageRepository;
-import org.knime.workbench.editor2.commands.AddAnnotationCommand;
 import org.knime.workbench.editor2.editparts.AnnotationEditPart;
 import org.knime.workbench.editor2.editparts.FontStore;
 
@@ -577,8 +576,8 @@ public class StyledTextEditor extends CellEditor {
     @Override
     protected void doSetValue(final Object value) {
         assert value instanceof Annotation : "Wrong value object!";
-        Annotation wa = (Annotation)value;
-        int alignment;
+        final Annotation wa = (Annotation)value;
+        final int alignment;
         switch (wa.getAlignment()) {
             case CENTER:
                 alignment = SWT.CENTER;
@@ -591,7 +590,7 @@ public class StyledTextEditor extends CellEditor {
         }
         checkSelectionOfAlignmentMenuItems(alignment);
         m_selectAllUponFocusGain = false;
-        String text;
+        final String text;
         if (wa instanceof NodeAnnotation) {
             if (AnnotationEditPart.isDefaultNodeAnnotation(wa)) {
                 text = AnnotationEditPart.getAnnotationText(wa);
@@ -601,9 +600,8 @@ public class StyledTextEditor extends CellEditor {
             }
         } else {
             text = wa.getText();
-            m_selectAllUponFocusGain = AddAnnotationCommand.INITIAL_FLOWANNO_TEXT.equals(text);
 
-            int annotationBorderSize = wa.getBorderSize();
+            final int annotationBorderSize = wa.getBorderSize();
             // set margins as borders
             m_styledText.setMarginColor(AnnotationEditPart.RGBintToColor(wa.getBorderColor()));
             if (annotationBorderSize > 0) {
@@ -611,8 +609,8 @@ public class StyledTextEditor extends CellEditor {
                     annotationBorderSize);
             }
             // for workflow annotations set the default font to the size stored in the annotation
-            Font defFont;
-            int defFontSize = wa.getDefaultFontSize();
+            final Font defFont;
+            final int defFontSize = wa.getDefaultFontSize();
             if (defFontSize < 0) {
                 defFont = AnnotationEditPart.getWorkflowAnnotationDefaultFont(); // uses the size from the pref page
             } else {

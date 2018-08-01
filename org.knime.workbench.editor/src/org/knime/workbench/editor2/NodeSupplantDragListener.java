@@ -156,7 +156,7 @@ public class NodeSupplantDragListener implements KeyListener, MouseListener, Mou
         m_dragPositionProcessor.addVetoer(new UnsupportedConnectionSurplantationVetoer());
         m_dragPositionProcessor.addVetoer(new UnsupportedNodeSurplantationVetoer());
 
-        final FigureCanvas fc = (FigureCanvas)viewer.getControl();
+        final FigureCanvas fc = getFigureCanvas();
         fc.addKeyListener(this);
         fc.addMouseListener(this);
         fc.addMouseMoveListener(this);
@@ -167,13 +167,21 @@ public class NodeSupplantDragListener implements KeyListener, MouseListener, Mou
      */
     public void dispose() {
         if (m_workflowEditor != null) {
-            final FigureCanvas fc = (FigureCanvas)m_workflowEditor.getGraphicalViewer().getControl();
+            final FigureCanvas fc = getFigureCanvas();
 
             if (fc != null) {
                 fc.removeMouseListener(this);
                 fc.removeMouseMoveListener(this);
             }
         }
+    }
+
+    private FigureCanvas getFigureCanvas() {
+        if (m_workflowEditor != null) {
+            return (FigureCanvas)m_workflowEditor.getGraphicalViewer().getControl();
+        }
+
+        return null;
     }
 
     private WorkflowManager getManager() {
