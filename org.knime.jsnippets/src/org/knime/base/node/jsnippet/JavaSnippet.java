@@ -327,7 +327,7 @@ public final class JavaSnippet implements JSnippet<JavaSnippetTemplate>, Closeab
      *
      * @param settings the settings
      */
-    public void setSettings(final JavaSnippetSettings settings) {
+    public synchronized void setSettings(final JavaSnippetSettings settings) {
         m_settings = settings;
         setJavaSnippetFields(settings.getJavaSnippetFields());
         setJarFiles(settings.getJarFiles());
@@ -1124,7 +1124,7 @@ public final class JavaSnippet implements JSnippet<JavaSnippetTemplate>, Closeab
      * @return the compiled snippet
      */
     @SuppressWarnings("unchecked")
-    private Class<? extends AbstractJSnippet> createSnippetClass() {
+    private synchronized Class<? extends AbstractJSnippet> createSnippetClass() {
         JavaSnippetCompiler compiler = new JavaSnippetCompiler(this);
 
         /* Recompile/Reload either if the code changed or the class loader has been closed since */
