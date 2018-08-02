@@ -157,7 +157,7 @@
     <rm:provider componentTypes="eclipse.feature,osgi.bundle,buckminster" readerType="p2" source="false" mutable="false">
       <rm:property key="buckminster.source" value="false"/>
       <rm:property key="buckminster.mutable" value="false"/>
-      <rm:uri format="http://172.168.100.30/p2-sites/knime/targetPlatform/"/>
+      <rm:uri format="http://172.168.100.50/p2-sites/knime/targetPlatform/"/>
     </rm:provider>
   </rm:searchPath>
 </rm:rmap>
