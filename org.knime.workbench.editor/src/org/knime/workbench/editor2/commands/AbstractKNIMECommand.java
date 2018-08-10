@@ -48,6 +48,8 @@
 package org.knime.workbench.editor2.commands;
 
 import org.eclipse.gef.commands.Command;
+import org.eclipse.jface.dialogs.MessageDialog;
+import org.eclipse.swt.widgets.Display;
 import org.knime.core.node.workflow.WorkflowManager;
 import org.knime.core.ui.node.workflow.WorkflowManagerUI;
 import org.knime.core.ui.wrapper.WorkflowManagerWrapper;
@@ -111,5 +113,15 @@ public abstract class AbstractKNIMECommand extends Command {
     public void dispose() {
         super.dispose();
         m_hostWFM = null;
+    }
+
+    /**
+     * Opens a warning dialog when something went wrong while trying to run a command.
+     *
+     * @param title the dialog title
+     * @param message the actual message
+     */
+    protected static void openDialog(final String title, final String message) {
+        MessageDialog.openError(Display.getDefault().getActiveShell(), title, message);
     }
 }

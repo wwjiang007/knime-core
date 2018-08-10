@@ -47,20 +47,31 @@
  */
 package org.knime.workbench.editor2.commands;
 
+import static org.knime.workbench.ui.async.AsyncSwitch.wfmAsyncSwitch;
+import static org.knime.workbench.ui.async.AsyncSwitch.wfmAsyncSwitchRethrow;
+
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 
 import org.eclipse.gef.EditPartViewer;
 import org.knime.core.node.workflow.Annotation;
-import org.knime.core.node.workflow.ConnectionContainer;
+import org.knime.core.node.workflow.ConnectionID;
 import org.knime.core.node.workflow.NodeID;
 import org.knime.core.node.workflow.WorkflowAnnotation;
+import org.knime.core.node.workflow.WorkflowAnnotationID;
 import org.knime.core.node.workflow.WorkflowCopyContent;
 import org.knime.core.node.workflow.WorkflowManager;
-import org.knime.core.node.workflow.WorkflowPersistor;
-import org.knime.core.ui.wrapper.Wrapper;
+import org.knime.core.ui.node.workflow.ConnectionContainerUI;
+import org.knime.core.ui.node.workflow.WorkflowCopyUI;
+import org.knime.core.ui.node.workflow.WorkflowCopyWithOffsetUI;
+import org.knime.core.ui.node.workflow.WorkflowManagerUI;
+import org.knime.core.ui.node.workflow.async.OperationNotAllowedException;
+import org.knime.core.ui.wrapper.WorkflowManagerWrapper;
 import org.knime.workbench.editor2.editparts.AnnotationEditPart;
 import org.knime.workbench.editor2.editparts.ConnectionContainerEditPart;
 import org.knime.workbench.editor2.editparts.NodeContainerEditPart;
@@ -76,12 +87,12 @@ public class DeleteCommand extends AbstractKNIMECommand {
     /** Ids of nodes being deleted. */
     private final NodeID[] m_nodeIDs;
     /** References to annotations being deleted. */
-    private final WorkflowAnnotation[] m_annotations;
+    private final WorkflowAnnotationID[] m_annotationIDs;
 
     /** Array containing connections that are to be deleted and which are not
      * part of the persistor (perisistor only covers connections whose source
      * and destination is part of the persistor as well). */
-    private final ConnectionContainer[] m_connections;
+    private final ConnectionContainerUI[] m_connections;
 
     /** Number of connections that will be deleted upon execute(). This includes
      * m_connections and all connections covered by the persistor. This number
@@ -89,12 +100,22 @@ public class DeleteCommand extends AbstractKNIMECommand {
      */
     private final int m_connectionCount;
 
-    /** Persistor of deleted sub flow for undo. */
-    private WorkflowPersistor m_undoPersitor;
+    /** Copy of deleted sub flow for undo. */
+    private WorkflowCopyUI m_undoCopy;
 
     /** A viewer in which to update the selection upon undo or null if none
      * could be determined. */
     private final EditPartViewer m_viewer;
+
+    /**
+     * To work backwards-compatible with {@link WorkflowManager}
+     *
+     * @param editParts
+     * @param manager
+     */
+    public DeleteCommand(final Collection<?> editParts, final WorkflowManager manager) {
+        this(editParts, WorkflowManagerWrapper.wrap(manager));
+    }
 
     /**
      * Creates a new delete command for a set of nodes. Undo will also restore
@@ -103,13 +124,13 @@ public class DeleteCommand extends AbstractKNIMECommand {
      * @param manager wfm hosting the nodes.
      */
     public DeleteCommand(final Collection<?> editParts,
-            final WorkflowManager manager) {
+            final WorkflowManagerUI manager) {
         super(manager);
         Set<NodeID> idSet = new LinkedHashSet<NodeID>();
-        Set<WorkflowAnnotation> annotationSet =
-            new LinkedHashSet<WorkflowAnnotation>();
-        Set<ConnectionContainer> conSet =
-            new LinkedHashSet<ConnectionContainer>();
+        Set<WorkflowAnnotationID> annotationSet =
+            new LinkedHashSet<WorkflowAnnotationID>();
+        Set<ConnectionContainerUI> conSet =
+            new LinkedHashSet<ConnectionContainerUI>();
         EditPartViewer viewer = null;
         for (Object p : editParts) {
             if (p instanceof NodeContainerEditPart) {
@@ -136,9 +157,7 @@ public class DeleteCommand extends AbstractKNIMECommand {
             } else if (p instanceof ConnectionContainerEditPart) {
                 ConnectionContainerEditPart ccep =
                     (ConnectionContainerEditPart)p;
-                if (Wrapper.wraps(ccep.getModel(), ConnectionContainer.class)) {
-                    conSet.add(Wrapper.unwrapCC(ccep.getModel()));
-                }
+                conSet.add(ccep.getModel());
                 if (viewer == null && ccep.getParent() != null) {
                     viewer = ccep.getViewer();
                 }
@@ -147,7 +166,7 @@ public class DeleteCommand extends AbstractKNIMECommand {
                 AnnotationEditPart anno = (AnnotationEditPart)p;
                 Annotation annotationModel = anno.getModel();
                 if (annotationModel instanceof WorkflowAnnotation) {
-                    annotationSet.add((WorkflowAnnotation)annotationModel);
+                    annotationSet.add(((WorkflowAnnotation)annotationModel).getID());
                 }
                 if (viewer == null && anno.getParent() != null) {
                     viewer = anno.getViewer();
@@ -156,20 +175,20 @@ public class DeleteCommand extends AbstractKNIMECommand {
         }
         m_viewer = viewer;
         m_nodeIDs = idSet.toArray(new NodeID[idSet.size()]);
-        m_annotations = annotationSet.toArray(
-                new WorkflowAnnotation[annotationSet.size()]);
+        m_annotationIDs = annotationSet.toArray(
+                new WorkflowAnnotationID[annotationSet.size()]);
 
         m_connectionCount = conSet.size();
         // remove all connections that will be contained in the persistor
-        for (Iterator<ConnectionContainer> it = conSet.iterator();
+        for (Iterator<ConnectionContainerUI> it = conSet.iterator();
         it.hasNext();) {
-            ConnectionContainer c = it.next();
+            ConnectionContainerUI c = it.next();
             if (idSet.contains(c.getSource()) && idSet.contains(c.getDest())) {
                 it.remove();
             }
         }
 
-        m_connections = conSet.toArray(new ConnectionContainer[conSet.size()]);
+        m_connections = conSet.toArray(new ConnectionContainerUI[conSet.size()]);
     }
 
     /** {@inheritDoc} */
@@ -179,42 +198,52 @@ public class DeleteCommand extends AbstractKNIMECommand {
             return false;
         }
         boolean foundValid = false;
-        WorkflowManager hostWFM = getHostWFM();
+        WorkflowManagerUI hostWFM = getHostWFMUI();
         for (NodeID id : m_nodeIDs) {
             foundValid = true;
             if (!hostWFM.canRemoveNode(id)) {
                 return false;
             }
         }
-        for (ConnectionContainer cc : m_connections) {
+        for (ConnectionContainerUI cc : m_connections) {
             foundValid = true;
-            if (!hostWFM.canRemoveConnection(cc)) {
+            if (!hostWFM.canRemoveConnection(cc.getID())) {
                 return false;
             }
         }
-        return foundValid || m_annotations.length > 0;
+        return foundValid || m_annotationIDs.length > 0;
     }
 
     /** {@inheritDoc} */
     @Override
     public void execute() {
-        WorkflowManager hostWFM = getHostWFM();
+        WorkflowManagerUI hostWFM = getHostWFMUI();
         // The WFM removes all connections for us, before the node is
         // removed.
-        if (m_nodeIDs.length > 0 || m_annotations.length > 0) {
+        if (m_nodeIDs.length > 0 || m_annotationIDs.length > 0) {
             WorkflowCopyContent.Builder content = WorkflowCopyContent.builder();
             content.setNodeIDs(m_nodeIDs);
-            content.setAnnotation(m_annotations);
-            m_undoPersitor = hostWFM.copy(true, content.build());
+            content.setAnnotationIDs(m_annotationIDs);
+            try {
+                m_undoCopy = wfmAsyncSwitchRethrow(wfm -> wfm.cut(content.build()), wfm -> wfm.cutAsync(content.build()),
+                    hostWFM, "Deleting content ...");
+            } catch (OperationNotAllowedException e) {
+                openDialog("Problem while deleting parts", e.getMessage());
+                return;
+            }
         }
-        for (WorkflowAnnotation anno : m_annotations) {
-            hostWFM.removeAnnotation(anno);
-        }
-        for (NodeID id : m_nodeIDs) {
-            hostWFM.removeNode(id);
-        }
-        for (ConnectionContainer cc : m_connections) {
-            hostWFM.removeConnection(cc);
+
+        //remove dangling connections that haven't been removed by the cut
+        ConnectionID[] connectionIDs =
+            Arrays.stream(m_connections).map(cc -> cc.getID()).toArray(size -> new ConnectionID[size]);
+        try {
+            wfmAsyncSwitchRethrow(wfm -> {
+                wfm.remove(new NodeID[0], connectionIDs, new WorkflowAnnotationID[0]);
+                return null;
+            }, wfm -> wfm.removeAsync(new NodeID[0], connectionIDs, new WorkflowAnnotationID[0]), hostWFM,
+                "Deleting connections ...");
+        } catch (OperationNotAllowedException e) {
+            openDialog("Problem while deleting parts", e.getMessage());
         }
     }
 
@@ -229,21 +258,53 @@ public class DeleteCommand extends AbstractKNIMECommand {
             m_viewer.deselectAll();
         }
 
-        WorkflowManager hostWFM = getHostWFM();
-        if (m_undoPersitor != null) {
-            hostWFM.paste(m_undoPersitor);
-        }
-        for (ConnectionContainer cc : m_connections) {
-            ConnectionContainer newCC = hostWFM.addConnection(cc.getSource(),
-                    cc.getSourcePort(), cc.getDest(), cc.getDestPort());
-            newCC.setUIInfo(cc.getUIInfo());
-        }
-     }
+        WorkflowManagerUI hostWFM = getHostWFMUI();
+        wfmAsyncSwitch(wfm -> {
+            //paste copied content
+            if (m_undoCopy != null) {
+                wfm.paste(m_undoCopy);
+            }
+
+            //add dangling connections
+            for (ConnectionContainerUI cc : m_connections) {
+                wfm.addConnection(cc.getSource(), cc.getSourcePort(), cc.getDest(), cc.getDestPort(),
+                    cc.getUIInfo() != null ? cc.getUIInfo().getAllBendpoints() : null);
+            }
+            return null;
+        }, wfm -> {
+            //paste copied content
+            CompletableFuture<WorkflowCopyContent> pasteFuture = null;
+            if (m_undoCopy != null) {
+                assert m_undoCopy instanceof WorkflowCopyWithOffsetUI;
+                pasteFuture = wfm.pasteAsync((WorkflowCopyWithOffsetUI)m_undoCopy);
+            }
+
+            //add dangling connections
+            Supplier<CompletableFuture<Void>> addConnections = () -> {
+                CompletableFuture<?>[] futures = new CompletableFuture[m_connections.length];
+                for (int i = 0; i < m_connections.length; i++) {
+                    //TODO reduce the number of async requests and or parallize!!
+                    ConnectionContainerUI cc = m_connections[i];
+                    CompletableFuture<ConnectionContainerUI> future =
+                        wfm.addConnectionAsync(cc.getSource(), cc.getSourcePort(), cc.getDest(), cc.getDestPort(),
+                            cc.getUIInfo() != null ? cc.getUIInfo().getAllBendpoints() : null).getUnderlyingFuture();
+                    futures[i] = future;
+                }
+                //combine futures and refresh workflow when all are completed
+                return CompletableFuture.allOf(futures).thenCompose(f -> wfm.refresh(false));
+            };
+            if (pasteFuture != null) {
+                return pasteFuture.thenCompose(c -> addConnections.get());
+            } else {
+                return addConnections.get();
+            }
+        }, hostWFM, "Pasting workflow content ...");
+    }
 
     /** {@inheritDoc} */
     @Override
     public void dispose() {
-        m_undoPersitor = null;
+        m_undoCopy = null;
         super.dispose();
     }
 
@@ -259,7 +320,6 @@ public class DeleteCommand extends AbstractKNIMECommand {
 
     /** @return the number of workflow annotations to be deleted. */
     public int getAnnotationCount() {
-        return m_annotations.length;
+        return m_annotationIDs.length;
     }
-
 }

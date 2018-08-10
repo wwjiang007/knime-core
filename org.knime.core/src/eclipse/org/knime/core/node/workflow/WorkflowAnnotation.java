@@ -52,6 +52,8 @@ package org.knime.core.node.workflow;
  */
 public class WorkflowAnnotation extends Annotation {
 
+    private WorkflowAnnotationID m_id = null;
+
     /** New empty annotation. */
     public WorkflowAnnotation() {
         this(new AnnotationData());
@@ -66,7 +68,43 @@ public class WorkflowAnnotation extends Annotation {
     /** {@inheritDoc} */
     @Override
     public WorkflowAnnotation clone() {
-        return (WorkflowAnnotation)super.clone();
+        WorkflowAnnotation anno = (WorkflowAnnotation)super.clone();
+        anno.unsetID();
+        return anno;
+    }
+
+    /**
+     * Sets the annotation id. Can only be called once in order to make sure that the very same annotation is not part
+     * of two or more workflows. If the id has been set already, an exception will be thrown.
+     *
+     * @param id the id
+     * @throws IllegalStateException if the id has been set already
+     */
+    void setID(final WorkflowAnnotationID id) throws IllegalStateException {
+        if (m_id != null) {
+            throw new IllegalStateException("Workflow annotation id has been set already");
+        }
+        m_id = id;
+    }
+
+    /**
+     * Sets the associated id to <code>null</code> such that {@link #setID(WorkflowAnnotationID)} can be called again.
+     * Is called when a workflow annotation is removed from its workflow manager
+     * ({@link WorkflowManager#removeAnnotation(WorkflowAnnotation)}).
+     */
+    void unsetID() {
+        m_id = null;
+    }
+
+    /**
+     * Gives access to the workflow annotation id. Id is only available if the workflow annotation is part of a
+     * workflow manager. I.e. when the annotation is added to a workflow manager the annotation id will be set by the
+     * workflow manager (see {@link WorkflowManager#addWorkflowAnnotation(WorkflowAnnotation)}).
+     *
+     * @return the id or <code>null</code> if the workflow annotation is not part of a workflow, yet
+     */
+    public WorkflowAnnotationID getID() {
+        return m_id;
     }
 
 }

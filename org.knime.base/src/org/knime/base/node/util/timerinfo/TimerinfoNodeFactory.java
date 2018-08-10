@@ -55,29 +55,12 @@ import org.knime.core.node.NodeView;
 /**
  * @author Michael Berthold, University of Konstanz
  */
-public class TimerinfoNodeFactory extends NodeFactory<TimerinfoNodeModel> {
-
-    /** Create factory, that instantiates nodes.
-     */
-    public TimerinfoNodeFactory() {
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    protected NodeDialogPane createNodeDialogPane() {
-        return null;
-    }
+public final class TimerinfoNodeFactory extends NodeFactory<TimerinfoNodeModel> {
 
     /** {@inheritDoc} */
     @Override
     public TimerinfoNodeModel createNodeModel() {
         return new TimerinfoNodeModel();
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public NodeView<TimerinfoNodeModel> createNodeView(final int index, final TimerinfoNodeModel model) {
-        return null;
     }
 
     /** {@inheritDoc} */
@@ -88,8 +71,20 @@ public class TimerinfoNodeFactory extends NodeFactory<TimerinfoNodeModel> {
 
     /** {@inheritDoc} */
     @Override
+    public NodeView<TimerinfoNodeModel> createNodeView(final int index, final TimerinfoNodeModel model) {
+        return null;
+    }
+
+    /** {@inheritDoc} */
+    @Override
     protected boolean hasDialog() {
-        return false;
+        return true;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    protected NodeDialogPane createNodeDialogPane() {
+        return new TimerinfoNodeDialog();
     }
 
 }

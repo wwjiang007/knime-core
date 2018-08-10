@@ -48,6 +48,7 @@
 package org.knime.core.node.workflow;
 
 import java.util.ArrayList;
+import java.util.Collections;
 
 import org.apache.commons.lang3.builder.ToStringBuilder;
 
@@ -64,7 +65,7 @@ public class ConnectionUIInformation {
 
 
     ConnectionUIInformation(final Builder connectionUIInfo) {
-        m_bendpoints =new int[connectionUIInfo.m_bendpoints.size()][];
+        m_bendpoints = new int[connectionUIInfo.m_bendpoints.size()][];
         for (int i = 0; i < m_bendpoints.length; i++) {
             m_bendpoints[i] = connectionUIInfo.m_bendpoints.get(i).clone();
         }
@@ -175,6 +176,19 @@ public class ConnectionUIInformation {
          */
         public Builder addBendpoint(final int x, final int y, final int index) {
             m_bendpoints.add(index, new int[]{x, y});
+            return this;
+        }
+
+        /**
+         * Sets all bendpoints at once. Already added bendpoints via {@link #addBendpoint(int, int, int)} will be
+         * overridden!
+         *
+         * @param bendpoints the bendpoints to set - will only be copied on {@link #build()}
+         * @return this
+         */
+        public Builder setBendpoints(final int[]... bendpoints) {
+            m_bendpoints.clear();
+            Collections.addAll(m_bendpoints, bendpoints);
             return this;
         }
 

@@ -49,6 +49,7 @@ package org.knime.base.node.util.timerinfo;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Map;
 
 import org.knime.core.data.DataColumnSpec;
 import org.knime.core.data.DataColumnSpecCreator;
@@ -67,20 +68,23 @@ import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionContext;
 import org.knime.core.node.ExecutionMonitor;
 import org.knime.core.node.InvalidSettingsException;
-import org.knime.core.node.NodeLogger;
 import org.knime.core.node.NodeModel;
 import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
+import org.knime.core.node.defaultnodesettings.SettingsModelIntegerBounded;
 import org.knime.core.node.port.PortObject;
 import org.knime.core.node.port.PortObjectSpec;
 import org.knime.core.node.port.PortType;
 import org.knime.core.node.port.flowvariable.FlowVariablePortObject;
 import org.knime.core.node.port.inactive.InactiveBranchConsumer;
+import org.knime.core.node.util.CheckUtils;
 import org.knime.core.node.workflow.NativeNodeContainer;
 import org.knime.core.node.workflow.NodeContainer;
 import org.knime.core.node.workflow.NodeContext;
+import org.knime.core.node.workflow.NodeID;
 import org.knime.core.node.workflow.NodeTimer;
 import org.knime.core.node.workflow.WorkflowManager;
+import org.knime.core.node.workflow.WorkflowManager.NodeModelFilter;
 
 /**
  * A simple node collecting timer information from the current workflow and
@@ -88,9 +92,21 @@ import org.knime.core.node.workflow.WorkflowManager;
  *
  * @author Michael Berthold, University of Konstanz
  */
-public class TimerinfoNodeModel extends NodeModel implements InactiveBranchConsumer {
+final class TimerinfoNodeModel extends NodeModel implements InactiveBranchConsumer {
 
-    private static final NodeLogger LOGGER = NodeLogger.getLogger(TimerinfoNodeModel.class);
+    /** the settings key for max depth */
+   static final String CFGKEY_MAXDEPTH = "MaxDepth";
+
+   /** the corresponding model */
+   private final SettingsModelIntegerBounded m_maxdepth = createMaxDepthSettingsModel();
+
+   /**
+    * @return new model for the "max depth" parameter
+    */
+   static SettingsModelIntegerBounded createMaxDepthSettingsModel() {
+       return new SettingsModelIntegerBounded(TimerinfoNodeModel.CFGKEY_MAXDEPTH,
+           /* def */ 2, /* range */ 0, Integer.MAX_VALUE);
+   }
 
     /**
      * One optional variable input, one data output.
@@ -108,7 +124,7 @@ public class TimerinfoNodeModel extends NodeModel implements InactiveBranchConsu
         return new PortObjectSpec[] { createSpec() };
     }
 
-    private DataTableSpec createSpec() {
+    private static DataTableSpec createSpec() {
         DataTableSpecCreator dtsc = new DataTableSpecCreator();
         DataColumnSpec[] colSpecs = new DataColumnSpec[] {
             new DataColumnSpecCreator("Name", StringCell.TYPE).createSpec(),
@@ -130,26 +146,57 @@ public class TimerinfoNodeModel extends NodeModel implements InactiveBranchConsu
     @Override
     protected PortObject[] execute(final PortObject[] inData, final ExecutionContext exec) throws Exception {
         BufferedDataContainer result = exec.createDataContainer(createSpec());
+        // we need to find the parent workflow manager of this node - which ain't easy...:
         WorkflowManager wfm = NodeContext.getContext().getWorkflowManager();
-        for (NodeContainer nc : wfm.getNodeContainers()) {
-            NodeTimer nt = nc.getNodeTimer();
-            DataRow row = new DefaultRow(
-                new RowKey("Node " + nc.getID().getIndex()),
-                new StringCell(nc.getName()),
-                nt.getLastExecutionDuration() >= 0
-                    ? new LongCell(nt.getLastExecutionDuration()) : DataType.getMissingCell(),
-                new LongCell(nt.getExecutionDurationSinceReset()),
-                new LongCell(nt.getExecutionDurationSinceStart()),
-                new IntCell(nt.getNrExecsSinceReset()),
-                new IntCell(nt.getNrExecsSinceStart()),
-                new StringCell(nc.getID().toString()),
-                new StringCell(nc instanceof NativeNodeContainer
-                    ? ((NativeNodeContainer)nc).getNodeModel().getClass().getName() : "n/a")
-            );
-            result.addRowToTable(row);
-        }
+        TimerinfoNodeModel myThis = this;
+        Map<NodeID, ? extends TimerinfoNodeModel> m = wfm.findNodes(TimerinfoNodeModel.class,
+            new NodeModelFilter<TimerinfoNodeModel>() {
+                @Override
+                public boolean include(final TimerinfoNodeModel nodeModel) {
+                    return nodeModel == myThis;
+                }},
+            /*recurse metanodes*/true, /*recurse wrapped metanodes*/true);
+        // we should always find exactly one such node
+        CheckUtils.checkState(m.size() == 1,
+                "Expected to find 'this' node exactly once (result set has size %d)", m.size());
+        NodeID myID = m.entrySet().iterator().next().getKey();
+        NodeContainer myNC = wfm.findNodeContainer(myID);
+        WorkflowManager myWfm = myNC.getParent();
+        reportThisLayer(myWfm, result, m_maxdepth.getIntValue(), myWfm.getID());
+
         result.close();
         return new PortObject[] { result.getTable() };
+    }
+
+    /** Internal method writing timer info into table for all nodes of a given WFM until
+     * a certain depth in the provided BDT. Wrapped Metanodes are treated normally,
+     * wrapped metanodes are not reported until depth 0.
+     */
+    private void reportThisLayer(final WorkflowManager wfm, final BufferedDataContainer result,
+        final int depth, final NodeID toplevelprefix) {
+        for (NodeContainer nc : wfm.getNodeContainers()) {
+            if ((nc instanceof WorkflowManager) && (depth > 0)) {
+                reportThisLayer((WorkflowManager)nc, result, depth-1, toplevelprefix);
+            } else {
+                // for the RowID we only use the last part of the prefix - also to stay backwards compatible
+                String rowid = "Node " + nc.getID().toString().substring(toplevelprefix.toString().length() + 1);
+                NodeTimer nt = nc.getNodeTimer();
+                DataRow row = new DefaultRow(
+                    new RowKey(rowid),
+                    new StringCell(nc.getName()),
+                    nt.getLastExecutionDuration() >= 0
+                        ? new LongCell(nt.getLastExecutionDuration()) : DataType.getMissingCell(),
+                    new LongCell(nt.getExecutionDurationSinceReset()),
+                    new LongCell(nt.getExecutionDurationSinceStart()),
+                    new IntCell(nt.getNrExecsSinceReset()),
+                    new IntCell(nt.getNrExecsSinceStart()),
+                    new StringCell(nc.getID().toString()),
+                    new StringCell(nc instanceof NativeNodeContainer
+                        ? ((NativeNodeContainer)nc).getNodeModel().getClass().getName() : "n/a")
+                );
+                result.addRowToTable(row);
+            }
+        }
     }
 
     /**
@@ -166,7 +213,7 @@ public class TimerinfoNodeModel extends NodeModel implements InactiveBranchConsu
      */
     @Override
     protected void validateSettings(final NodeSettingsRO settings) throws InvalidSettingsException {
-        // no settings
+        // nothing to do.
     }
 
     /**
@@ -174,7 +221,12 @@ public class TimerinfoNodeModel extends NodeModel implements InactiveBranchConsu
      */
     @Override
     protected void loadValidatedSettingsFrom(final NodeSettingsRO settings) throws InvalidSettingsException {
-        // no settings
+        try {
+            m_maxdepth.loadSettingsFrom(settings);
+        } catch (InvalidSettingsException ise) {
+            // if settings don't exist, emulate old behaviour: no descent.
+            m_maxdepth.setIntValue(0);
+        }
     }
 
     /**
@@ -199,7 +251,7 @@ public class TimerinfoNodeModel extends NodeModel implements InactiveBranchConsu
      */
     @Override
     protected void saveSettingsTo(final NodeSettingsWO settings) {
-        // no settings
+        m_maxdepth.saveSettingsTo(settings);
     }
 
 }
