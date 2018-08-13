@@ -1,12 +1,12 @@
 package org.knime.core.data.convert.map;
 
 import org.knime.core.data.DataCell;
-import org.knime.core.data.convert.datacell.JavaToDataCellConverter;
 import org.knime.core.data.convert.datacell.JavaToDataCellConverterFactory;
+import org.knime.core.data.convert.java.DataCellToJavaConverterFactory;
 
 /**
- * A selection of {@link CellValueProducer} to {@link JavaToDataCellConverter} to write a certain value from
- * {@link Source} to a {@link DataCell}.
+ * A selection of {@link DataCellToJavaConverterFactory} to {@link CellValueConsumerFactory} to read a value from a
+ * {@link Source} into a {@link DataCell}.
  *
  * @author Jonathan Hale
  * @since 3.6
@@ -26,13 +26,30 @@ public class ProductionPath {
     /**
      * Constructor.
      *
-     * @param producerFactory Factory to create the producer which gets a value from an external source
-     * @param f Factory to create a converter used to wrap the value from the producer into a data cell
+     * @param producerFactory Factory to create the producer which reads a value from an external source
+     * @param converterFactory Factory to create a converter used to wrap the read value from the producer into a data
+     *            cell
      */
     public ProductionPath(final CellValueProducerFactory<?, ?, ?, ?> producerFactory,
-        final JavaToDataCellConverterFactory<?> f) {
+        final JavaToDataCellConverterFactory<?> converterFactory) {
         this.m_producerFactory = producerFactory;
-        this.m_converterFactory = f;
+        this.m_converterFactory = converterFactory;
+    }
+
+    /**
+     * @return The cell value producer factory used in this path.
+     * @since 3.7
+     */
+    public CellValueProducerFactory<?, ?, ?, ?> getProducerFactory() {
+        return m_producerFactory;
+    }
+
+    /**
+     * @return The converter factory used in this path.
+     * @since 3.7
+     */
+    public JavaToDataCellConverterFactory<?> getConverterFactory() {
+        return m_converterFactory;
     }
 
     @Override
@@ -62,7 +79,7 @@ public class ProductionPath {
         if (getClass() != obj.getClass()) {
             return false;
         }
-        ProductionPath other = (ProductionPath)obj;
+        final ProductionPath other = (ProductionPath)obj;
         if (m_producerFactory == null) {
             if (other.m_producerFactory != null) {
                 return false;

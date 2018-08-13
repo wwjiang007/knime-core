@@ -1,12 +1,11 @@
 package org.knime.core.data.convert.map;
 
 import org.knime.core.data.DataValue;
-import org.knime.core.data.convert.java.DataCellToJavaConverter;
 import org.knime.core.data.convert.java.DataCellToJavaConverterFactory;
 
 /**
- * A selection of {@link DataCellToJavaConverter} to {@link CellValueConsumer} to write a certain {@link DataValue} to a
- * {@link Destination}.
+ * A pair of {@link DataCellToJavaConverterFactory} and {@link CellValueConsumerFactory} to write a certain
+ * {@link DataValue} to a {@link Destination} as a certain external type.
  *
  * @author Jonathan Hale, KNIME, Konstanz, Germany
  * @since 3.6
@@ -25,14 +24,30 @@ public class ConsumptionPath {
     /**
      * Constructor.
      *
-     * @param factory Factory of the converter used to extract a Java value out a DataCell.
-     * @param consumer CellValueConsumer which accepts the Java value extracted by the converter and writes it to some
-     *            {@link Destination}.
+     * @param converterFactory Factory for the converter to use for extracting the Java value out of a DataValue.
+     * @param consumerFactory Factory for the CellValueConsumer which accepts the Java value extracted by the
+     *            <code>converterFactory</code> and writes it to some {@link Destination}.
      */
-    public ConsumptionPath(final DataCellToJavaConverterFactory<?, ?> factory,
-        final CellValueConsumerFactory<?, ?, ?, ?> consumer) {
-        this.m_converterFactory = factory;
-        this.m_consumerFactory = consumer;
+    public ConsumptionPath(final DataCellToJavaConverterFactory<?, ?> converterFactory,
+        final CellValueConsumerFactory<?, ?, ?, ?> consumerFactory) {
+        this.m_converterFactory = converterFactory;
+        this.m_consumerFactory = consumerFactory;
+    }
+
+    /**
+     * @return The converter factory used in this path.
+     * @since 3.7
+     */
+    public DataCellToJavaConverterFactory<?, ?> getConverterFactory() {
+        return m_converterFactory;
+    }
+
+    /**
+     * @return The consumer factory used in this path.
+     * @since 3.7
+     */
+    public CellValueConsumerFactory<?, ?, ?, ?> getConsumerFactory() {
+        return m_consumerFactory;
     }
 
     @Override
@@ -62,7 +77,7 @@ public class ConsumptionPath {
         if (getClass() != obj.getClass()) {
             return false;
         }
-        ConsumptionPath other = (ConsumptionPath)obj;
+        final ConsumptionPath other = (ConsumptionPath)obj;
         if (m_consumerFactory == null) {
             if (other.m_consumerFactory != null) {
                 return false;

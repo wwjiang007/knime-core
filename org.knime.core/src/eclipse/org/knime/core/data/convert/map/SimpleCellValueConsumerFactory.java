@@ -51,36 +51,37 @@ package org.knime.core.data.convert.map;
 import org.knime.core.data.convert.map.Destination.ConsumerParameters;
 
 /**
- * Simple implementation of {@link CellValueConsumer} that allows passing the consumption procedure as a lambda.
+ * Simple implementation of {@link CellValueConsumerFactory} that allows passing the consumption procedure as a lambda
+ * expression.
  *
  * @author Jonathan Hale, KNIME, Konstanz, Germany
- * @param <DestinationType> Type of destination
+ * @param <D> Type of destination the consumer can write to
  * @param <T> Java type the created consumer is able to accept
- * @param <ExternalType> Type of destination types
+ * @param <ET> Type of external types
  * @param <CP> Subclass of {@link ConsumerParameters} for given destination type
  *
  * @since 3.6
  */
-public class SimpleCellValueConsumerFactory<DestinationType extends Destination<?>, T, ExternalType, CP extends ConsumerParameters<DestinationType>>
-    extends AbstractCellValueConsumerFactory<DestinationType, T, ExternalType, CP> {
+public class SimpleCellValueConsumerFactory<D extends Destination<ET>, T, ET, CP extends ConsumerParameters<D>>
+    extends AbstractCellValueConsumerFactory<D, T, ET, CP> {
 
-    final ExternalType m_externalType;
+    final ET m_externalType;
 
     final Class<?> m_sourceType;
 
-    final CellValueConsumer<DestinationType, T, CP> m_consumer;
+    final CellValueConsumer<D, T, CP> m_consumer;
 
     /**
      * Constructor
      *
      * @param sourceType Class of the type the created consumer accepts
-     * @param destType Identifier of the external type this consumer writes as
-     * @param consumer The consumer function (e.g. a Lambda)
+     * @param externalType Identifier of the external type this consumer writes as
+     * @param consumer The consumer function (e.g. as lambda expression)
      */
-    public SimpleCellValueConsumerFactory(final Class<?> sourceType, final ExternalType destType,
-        final CellValueConsumer<DestinationType, T, CP> consumer) {
+    public SimpleCellValueConsumerFactory(final Class<?> sourceType, final ET externalType,
+        final CellValueConsumer<D, T, CP> consumer) {
         m_sourceType = sourceType;
-        m_externalType = destType;
+        m_externalType = externalType;
         m_consumer = consumer;
     }
 
@@ -90,12 +91,12 @@ public class SimpleCellValueConsumerFactory<DestinationType extends Destination<
     }
 
     @Override
-    public CellValueConsumer<DestinationType, T, CP> create() {
+    public CellValueConsumer<D, T, CP> create() {
         return m_consumer;
     }
 
     @Override
-    public ExternalType getDestinationType() {
+    public ET getDestinationType() {
         return m_externalType;
     }
 

@@ -1,8 +1,7 @@
 /*
  * ------------------------------------------------------------------------
  *
- *  Copyright by KNIME AG, Zurich, Switzerland
- *  Website: http://www.knime.com; Email: contact@knime.com
+ *  Copyright by KNIME AG, Zurich, Switzerland *  Website: http://www.knime.com; Email: contact@knime.com
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License, Version 3, as
@@ -52,24 +51,24 @@ import org.knime.core.data.convert.ConverterFactory;
 import org.knime.core.data.convert.map.Destination.ConsumerParameters;
 
 /**
- * Factory to create {@link CellValueConsumer}.
+ * Factory to create {@link CellValueConsumer} instances.
  *
  * @author Jonathan Hale, KNIME, Konstanz, Germany
- * @param <DestinationType> Type of destination
+ * @param <D> Type of destination
  * @param <T> Java value to be consumed by the created {@link CellValueConsumer}
- * @param <ExternalType> Type of destination types
+ * @param <ET> Type of destination types
  * @param <CP> Subclass of {@link ConsumerParameters} for the given source type
  * @since 3.6
  */
-public interface CellValueConsumerFactory<DestinationType extends Destination<?>, T, ExternalType, CP extends ConsumerParameters<DestinationType>>
-    extends ConverterFactory<Class<?>, ExternalType> {
+public interface CellValueConsumerFactory<D extends Destination<?>, T, ET, CP extends ConsumerParameters<D>>
+    extends ConverterFactory<Class<?>, ET> {
 
     /**
      * Create a {@link CellValueConsumer}.
      *
      * @return The created consumer
      */
-    public CellValueConsumer<DestinationType, T, CP> create();
+    public CellValueConsumer<D, T, CP> create();
 
     @Override
     default String getName() {

@@ -51,34 +51,35 @@ package org.knime.core.data.convert.map;
 import org.knime.core.data.convert.map.Source.ProducerParameters;
 
 /**
- * Simple implementation of {@link CellValueProducer} that allows passing the production function as a lambda
+ * Simple implementation of {@link CellValueProducerFactory} that allows passing the production function as a lambda
+ * expression.
  *
  * @author Jonathan Hale, KNIME, Konstanz, Germany
- * @param <SourceType> Type of source
- * @param <ExternalType> Type of the external type
- * @param <T> Java type that is produced
- * @param <PP> Producer parameter subclass for the source type
+ * @param <S> Type of source this producer can read from
+ * @param <ET> Type of external types
+ * @param <T> Java type the created producer returns
+ * @param <PP> Subclass of {@link ProducerParameters} for the given source type
  *
  * @since 3.6
  */
-public class SimpleCellValueProducerFactory<SourceType extends Source<ExternalType>, ExternalType, T, PP extends ProducerParameters<SourceType>>
-    extends AbstractCellValueProducerFactory<SourceType, ExternalType, T, PP> {
+public class SimpleCellValueProducerFactory<S extends Source<ET>, ET, T, PP extends ProducerParameters<S>>
+    extends AbstractCellValueProducerFactory<S, ET, T, PP> {
 
-    final ExternalType m_externalType;
+    final ET m_externalType;
 
     final Class<?> m_destType;
 
-    final CellValueProducer<SourceType, T, PP> m_producer;
+    final CellValueProducer<S, T, PP> m_producer;
 
     /**
      * Constructor
      *
-     * @param externalType Identifier of the external type
+     * @param externalType Identifier of the external type this producer reads
      * @param destType Target Java type
-     * @param producer Cell value producer function (e.g. as lambda)
+     * @param producer The producer function (e.g. as lambda expression)
      */
-    public SimpleCellValueProducerFactory(final ExternalType externalType, final Class<?> destType,
-        final CellValueProducer<SourceType, T, PP> producer) {
+    public SimpleCellValueProducerFactory(final ET externalType, final Class<?> destType,
+        final CellValueProducer<S, T, PP> producer) {
         m_externalType = externalType;
         m_destType = destType;
         m_producer = producer;
@@ -95,12 +96,12 @@ public class SimpleCellValueProducerFactory<SourceType extends Source<ExternalTy
     }
 
     @Override
-    public ExternalType getSourceType() {
+    public ET getSourceType() {
         return m_externalType;
     }
 
     @Override
-    public CellValueProducer<SourceType, T, PP> create() {
+    public CellValueProducer<S, T, PP> create() {
         return m_producer;
     }
 }

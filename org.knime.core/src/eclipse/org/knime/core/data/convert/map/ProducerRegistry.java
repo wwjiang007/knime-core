@@ -56,20 +56,18 @@ import org.knime.core.data.convert.datacell.JavaToDataCellConverterFactory;
 import org.knime.core.data.convert.datacell.JavaToDataCellConverterRegistry;
 
 /**
- * Per source type producer registry.
- *
- * Place to register consumers for a specific destination type.
+ * Registry for {@link CellValueProducerFactory} per source type (i.e. implementor of {@link Source})
  *
  * @author Jonathan Hale, KNIME, Konstanz, Germany
- * @param <ExternalType> Type of the external type
- * @param <SourceType> Type of {@link Destination} for which this registry holds consumers.
+ * @param <ET> Type of the external type
+ * @param <ST> Type of {@link Source} for which this registry holds consumers.
  * @since 3.6
  */
-public class ProducerRegistry<ExternalType, SourceType extends Source<ExternalType>> extends
-    AbstractConverterFactoryRegistry<ExternalType, Class<?>, CellValueProducerFactory<SourceType, ExternalType, ?, ?>, ProducerRegistry<ExternalType, SourceType>> {
+public class ProducerRegistry<ET, ST extends Source<ET>> extends
+    AbstractConverterFactoryRegistry<ET, Class<?>, CellValueProducerFactory<ST, ET, ?, ?>, ProducerRegistry<ET, ST>> {
 
     /**
-     * Constructor
+     * Constructor, hidden because should be created via {@link MappingFramework#createProducerRegistry}.
      */
     protected ProducerRegistry() {
     }
@@ -78,39 +76,63 @@ public class ProducerRegistry<ExternalType, SourceType extends Source<ExternalTy
      * Set parent source type.
      *
      * Makes this registry inherit all producers of the parent type. Will always priorize producers of the more
-     * specialized type.
+     * specialized (child) type.
      *
      * @param parentType type of {@link Destination}, which should be this types parent.
      * @return reference to self (for method chaining)
+     * @param <PT> Type of the parent registry
      */
-    public <ParentType extends Source<ExternalType>> ProducerRegistry<ExternalType, SourceType> setParent(final Class<ParentType> parentType) {
-        m_parent = (ProducerRegistry<ExternalType, SourceType>)MappingFramework.forSourceType(parentType);
+    public <PT extends Source<ET>> ProducerRegistry<ET, ST> setParent(final Class<PT> parentType) {
+        m_parent = (ProducerRegistry<ET, ST>)MappingFramework.forSourceType(parentType);
         return this;
     }
 
     /**
-     * Get production paths that can map the given external type to a DataCell.
+     * Get all available production paths
      *
-     * @param externalType The external type
      * @return All possible production paths
+     * @since 3.7
      */
-    public List<ProductionPath> getAvailableProductionPaths(final ExternalType externalType) {
-        final ArrayList<ProductionPath> cp = new ArrayList<>();
+    public List<ProductionPath> getAvailableProductionPaths() {
+        final ArrayList<ProductionPath> productionPaths = new ArrayList<>();
 
-        for (final CellValueProducerFactory<SourceType, ExternalType, ?, ?> producerFactory : getFactoriesForSourceType(
-            externalType)) {
-
-            for (final JavaToDataCellConverterFactory<?> f : JavaToDataCellConverterRegistry.getInstance()
+        for (final CellValueProducerFactory<ST, ET, ?, ?> producerFactory : getAllConverterFactories()) {
+            for (final JavaToDataCellConverterFactory<?> converterFactory : JavaToDataCellConverterRegistry.getInstance()
                 .getFactoriesForSourceType(producerFactory.getDestinationType())) {
-                cp.add(new ProductionPath(producerFactory, f));
+                productionPaths.add(new ProductionPath(producerFactory, converterFactory));
             }
         }
 
         if (m_parent != null) {
-            cp.addAll(m_parent.getAvailableProductionPaths(externalType));
+            productionPaths.addAll(m_parent.getAvailableProductionPaths());
         }
 
-        return cp;
+        return productionPaths;
+    }
+
+    /**
+     * Get all production paths that can map the given external type to some DataCell.
+     *
+     * @param externalType The external type
+     * @return All possible production paths
+     */
+    public List<ProductionPath> getAvailableProductionPaths(final ET externalType) {
+        final ArrayList<ProductionPath> productionPaths = new ArrayList<>();
+
+        for (final CellValueProducerFactory<ST, ET, ?, ?> producerFactory : getFactoriesForSourceType(
+            externalType)) {
+
+            for (final JavaToDataCellConverterFactory<?> converterFactory : JavaToDataCellConverterRegistry.getInstance()
+                .getFactoriesForSourceType(producerFactory.getDestinationType())) {
+                productionPaths.add(new ProductionPath(producerFactory, converterFactory));
+            }
+        }
+
+        if (m_parent != null) {
+            productionPaths.addAll(m_parent.getAvailableProductionPaths(externalType));
+        }
+
+        return productionPaths;
     }
 
     /**
@@ -118,7 +140,7 @@ public class ProducerRegistry<ExternalType, SourceType extends Source<ExternalTy
      *
      * @return self (for method chaining)
      */
-    public ProducerRegistry<ExternalType, SourceType> unregisterAllProducers() {
+    public ProducerRegistry<ET, ST> unregisterAllProducers() {
         m_byDestinationType.clear();
         m_bySourceType.clear();
         m_byIdentifier.clear();
