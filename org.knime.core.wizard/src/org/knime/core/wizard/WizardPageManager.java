@@ -48,14 +48,24 @@
  */
 package org.knime.core.wizard;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.knime.core.node.CanceledExecutionException;
+import org.knime.core.node.ExecutionMonitor;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.dialog.ExternalNodeData;
 import org.knime.core.node.dialog.ExternalNodeData.ExternalNodeDataBuilder;
+import org.knime.core.node.interactive.SimpleErrorViewResponse;
+import org.knime.core.node.interactive.ViewRequestHandlingException;
+import org.knime.core.node.interactive.ViewResponseMonitor;
 import org.knime.core.node.web.ValidationError;
+import org.knime.core.node.wizard.ViewRequestExecutor;
+import org.knime.core.node.wizard.WizardViewRequestHandler;
+import org.knime.core.node.wizard.WizardViewRequestRunner;
+import org.knime.core.node.wizard.WizardViewResponse;
 import org.knime.core.node.workflow.NodeID.NodeIDSuffix;
 import org.knime.core.node.workflow.WebResourceController;
 import org.knime.core.node.workflow.WebResourceController.WizardPageContent;
@@ -66,7 +76,9 @@ import org.knime.js.core.JSONWebNodePage;
 import org.knime.js.core.layout.bs.JSONLayoutPage;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 
 /**
  * Utility class which handles serialization/deserialization of meta node or wizard views
@@ -75,7 +87,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * @author Christian Albrecht, KNIME.com GmbH, Konstanz, Germany
  * @since 3.4
  */
-public final class WizardPageManager extends AbstractPageManager {
+public final class WizardPageManager extends AbstractPageManager implements ViewRequestExecutor<String>,
+    WizardViewRequestHandler<SubnodeViewRequest, SubnodeViewResponse> {
 
     /**
      * Returns a {@link WizardPageManager} instance for the given {@link WorkflowManager}
@@ -137,19 +150,23 @@ public final class WizardPageManager extends AbstractPageManager {
      * Applies a given map of workflow parameters to the current workflow
      *
      * @param parameterMap a map with parameter name as key and parameter string value as value
-     * @throws InvalidSettingsException If a parameter name is not valid or a not uniquely defined in the workflow or if the parameter value does not validate.
+     * @throws InvalidSettingsException If a parameter name is not valid or a not uniquely defined in the
+     * workflow or if the parameter value does not validate.
      */
-    public void applyWorkflowParameters(final Map<String, String> parameterMap) throws InvalidSettingsException {
+    public void applyWorkflowParameters(final Map<String, String> parameterMap)
+            throws InvalidSettingsException {
         try (WorkflowLock lock = getWorkflowManager().lock()) {
             if (parameterMap.size() > 0) {
-                Map<String, ExternalNodeData> inputData = new HashMap<String, ExternalNodeData>(parameterMap.size());
+                Map<String, ExternalNodeData> inputData =
+                        new HashMap<String, ExternalNodeData>(parameterMap.size());
                 for (String key : parameterMap.keySet()) {
                     ExternalNodeDataBuilder dataBuilder = ExternalNodeData.builder(key);
                     dataBuilder.stringValue(parameterMap.get(key));
                     inputData.put(key, dataBuilder.build());
                 }
                 try {
-                    //FIXME: This call should happen on the WizardExecutionController, once there is no potential version issues
+                    /*FIXME: This call should happen on the WizardExecutionController, once there is no
+                    potential version issues*/
                     getWorkflowManager().setInputNodes(inputData);
                 } catch (Exception ex) {
                     String errorPrefix = "Could not set workflow parameters: ";
@@ -179,6 +196,121 @@ public final class WizardPageManager extends AbstractPageManager {
                 validationResults = wec.loadValuesIntoCurrentPage(viewContentMap);
             }
             return serializeValidationResult(validationResults);
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     * @since 3.7
+     */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    @Override
+    public String handleViewRequest(final String request) {
+        ViewRequestRegistry registry = ViewRequestRegistry.getInstance();
+        ExecutionMonitor exec = new ExecutionMonitor();
+        ViewResponseMonitor<SubnodeViewResponse> requestJob = null;
+        int requestSequence = -1;
+        try (WorkflowLock lock = getWorkflowManager().lock()){
+            SubnodeViewRequest wrapperRequest = new SubnodeViewRequest();
+            wrapperRequest.loadFromStream(new ByteArrayInputStream(request.getBytes("UTF-8")));
+            requestSequence = wrapperRequest.getSequence();
+            requestJob = WizardViewRequestRunner.run(this, wrapperRequest, exec);
+            registry.addOrUpdateJob(requestJob);
+            return serializeResponseMonitor(requestJob);
+        } catch (Exception ex) {
+            if (requestJob != null) {
+                registry.removeJob(requestJob.getId());
+            }
+            if (requestSequence == -1) {
+                try {
+                    requestSequence = tryGetSequenceFromRequest(request);
+                } catch (Exception ex2) { /* nothing can be done in this case */ }
+            }
+            return serializeResponseMonitor(new SimpleErrorViewResponse(requestSequence, ex.getMessage()));
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     * @since 3.7
+     */
+    @Override
+    public SubnodeViewResponse handleRequest(final SubnodeViewRequest request, final ExecutionMonitor exec)
+        throws ViewRequestHandlingException, InterruptedException, CanceledExecutionException {
+        try (WorkflowLock lock = getWorkflowManager().lock()) {
+            WizardExecutionController wec = getWizardExecutionController();
+            WizardViewResponse response =
+                wec.processViewRequestOnCurrentPage(request.getNodeID(), request.getJsonRequest(), exec);
+            return new SubnodeViewResponse(request, request.getNodeID(), serializeViewResponse(response));
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     * @since 3.7
+     */
+    @Override
+    public SubnodeViewRequest createEmptyViewRequest() {
+        return new SubnodeViewRequest();
+    }
+
+    private static String serializeResponseMonitor(
+        final ViewResponseMonitor<? extends WizardViewResponse> monitor) {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new Jdk8Module());
+        try {
+            return mapper.writeValueAsString(monitor);
+        } catch (JsonProcessingException ex) {
+            //log error?
+            return null;
+        }
+    }
+
+    private static int tryGetSequenceFromRequest(final String jsonRequest) throws JsonProcessingException,
+        IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    JsonNode node = mapper.readTree(jsonRequest);
+    JsonNode sequenceNode = node.get("sequence");
+    if (sequenceNode != null) {
+        int sequence = sequenceNode.asInt(-1);
+        if (sequence >= 0) {
+            return sequence;
+        }
+    }
+    throw new IllegalArgumentException("JSON request string did not contain a 'sequence' field.");
+}
+
+    /**
+     * {@inheritDoc}
+     * @since 3.7
+     */
+    @Override
+    public String updateRequestStatus(final String monitorID) {
+        ViewRequestRegistry registry = ViewRequestRegistry.getInstance();
+        if (registry.isJobRegistered(monitorID)) {
+            ViewResponseMonitor<? extends WizardViewResponse> monitor = registry.getJob(monitorID);
+            if (monitor != null) {
+                if (monitor.isCancelled() || monitor.isExecutionFailed()
+                    || (monitor.isExecutionFinished() && monitor.isResponseAvailable())) {
+                    registry.removeJob(monitor.getId());
+                }
+                return serializeResponseMonitor(monitor);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * {@inheritDoc}
+     * @since 3.7
+     */
+    @Override
+    public void cancelRequest(final String monitorID) {
+        ViewRequestRegistry registry = ViewRequestRegistry.getInstance();
+        if (registry.isJobRegistered(monitorID)) {
+            ViewResponseMonitor<? extends WizardViewResponse> job = registry.getJob(monitorID);
+            job.cancel();
+            registry.removeJob(monitorID);
         }
     }
 }

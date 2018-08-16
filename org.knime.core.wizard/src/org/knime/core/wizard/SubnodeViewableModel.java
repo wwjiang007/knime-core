@@ -59,8 +59,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.commons.io.FileUtils;
 import org.knime.core.node.AbstractNodeView.ViewableModel;
+import org.knime.core.node.CanceledExecutionException;
+import org.knime.core.node.ExecutionMonitor;
 import org.knime.core.node.NodeLogger;
 import org.knime.core.node.NodeSettingsWO;
+import org.knime.core.node.interactive.ViewRequestHandlingException;
 import org.knime.core.node.util.CheckUtils;
 import org.knime.core.node.web.DefaultWebTemplate;
 import org.knime.core.node.web.ValidationError;
@@ -70,6 +73,7 @@ import org.knime.core.node.web.WebTemplate;
 import org.knime.core.node.wizard.AbstractWizardNodeView;
 import org.knime.core.node.wizard.WizardNode;
 import org.knime.core.node.wizard.WizardViewCreator;
+import org.knime.core.node.wizard.WizardViewRequestHandler;
 import org.knime.core.node.workflow.NodeContainerState;
 import org.knime.core.node.workflow.NodeStateChangeListener;
 import org.knime.core.node.workflow.SubNodeContainer;
@@ -92,7 +96,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
  * @author Christian Albrecht, KNIME.com GmbH, Konstanz, Germany
  * @since 3.4
  */
-public class SubnodeViewableModel implements ViewableModel, WizardNode<JSONWebNodePage, SubnodeViewValue> {
+public class SubnodeViewableModel implements ViewableModel, WizardNode<JSONWebNodePage, SubnodeViewValue>,
+        WizardViewRequestHandler<SubnodeViewRequest, SubnodeViewResponse> {
 
     private static final NodeLogger LOGGER = NodeLogger.getLogger(SubnodeViewableModel.class);
 
@@ -384,7 +389,7 @@ public class SubnodeViewableModel implements ViewableModel, WizardNode<JSONWebNo
             setWebTemplate(createSubnodeWebTemplate());
         }
 
-        private WebTemplate createSubnodeWebTemplate() {
+        private static WebTemplate createSubnodeWebTemplate() {
             List<WebResourceLocator> locators = new ArrayList<WebResourceLocator>();
             String pluginName = "org.knime.js.core";
             boolean isDebug = isDebug();
@@ -470,5 +475,26 @@ public class SubnodeViewableModel implements ViewableModel, WizardNode<JSONWebNo
                 return "Validation errors present but could not be serialized: " + e.getMessage();
             }
         }
+    }
+
+    /**
+     * {@inheritDoc}
+     * @since 3.7
+     */
+    @Override
+    public SubnodeViewResponse handleRequest(final SubnodeViewRequest request, final ExecutionMonitor exec)
+        throws ViewRequestHandlingException, InterruptedException, CanceledExecutionException {
+        String jsonResponse = m_spm.processViewRequest(request.getNodeID(), request.getJsonRequest(),
+            m_container.getID(), exec);
+        return new SubnodeViewResponse(request, request.getNodeID(), jsonResponse);
+    }
+
+    /**
+     * {@inheritDoc}
+     * @since 3.7
+     */
+    @Override
+    public SubnodeViewRequest createEmptyViewRequest() {
+        return new SubnodeViewRequest();
     }
 }

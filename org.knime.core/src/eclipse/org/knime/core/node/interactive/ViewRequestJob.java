@@ -1,5 +1,6 @@
 /*
  * ------------------------------------------------------------------------
+ *
  *  Copyright by KNIME AG, Zurich, Switzerland
  *  Website: http://www.knime.com; Email: contact@knime.com
  *
@@ -40,58 +41,49 @@
  *  propagated with or for interoperation with KNIME.  The owner of a Node
  *  may freely choose the license terms applicable to such Node, including
  *  when such Node is propagated with or for interoperation with KNIME.
- * ------------------------------------------------------------------------
+ * ---------------------------------------------------------------------
+ *
+ * History
+ *   25 Apr 2018 (albrecht): created
  */
-package org.knime.base.node.mine.knn;
+package org.knime.core.node.interactive;
 
-import org.knime.core.node.NodeDialogPane;
-import org.knime.core.node.NodeFactory;
-import org.knime.core.node.NodeView;
+import org.knime.core.node.wizard.WizardViewRequest;
+import org.knime.core.node.wizard.WizardViewRequestHandler;
+import org.knime.core.node.wizard.WizardViewResponse;
 
 /**
- * This factory creates all necessary object for the kNN node.
+ * Interface for objects which can initiate execution of a view request.
  *
- * @author Michael Berthold, University of Konstanz
+ *
+ * @author Christian Albrecht, KNIME GmbH, Konstanz, Germany
+ * @param <RES> The actual class of the response implementation to be generated
+ * @since 3.7
+ * @noreference This interface is not intended to be referenced by clients.
+ * @noinstantiate This interface is not intended to be instantiated by clients.
  */
-public class KnnNodeFactory extends NodeFactory<KnnNodeModel> {
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    protected NodeDialogPane createNodeDialogPane() {
-        return new KnnNodeDialogPane();
-    }
+public interface ViewRequestJob<RES extends WizardViewResponse> {
 
     /**
-     * {@inheritDoc}
+     * Returns a unique id for this monitor object, not null.
+     * @return the unique id
      */
-    @Override
-    public KnnNodeModel createNodeModel() {
-        return new KnnNodeModel();
-    }
+    public String getId();
 
     /**
-     * {@inheritDoc}
+     * Initiates the asynchronous processing of a view request in the provided request handler.
+     *
+     * @param handler A {@link ViewRequestHandler} instance able to process the corresponding request
+     * @param request The {@link ViewRequest} to be processed
+     * @param <REQ> The actual class of the view request
      */
-    @Override
-    public NodeView<KnnNodeModel> createNodeView(final int viewIndex,
-            final KnnNodeModel nodeModel) {
-        return null;
-    }
+    public <REQ extends WizardViewRequest> void start(final WizardViewRequestHandler<REQ, RES> handler,
+        final REQ request);
 
     /**
-     * {@inheritDoc}
+     * Cancels the view request processing. This method has no effect on already completed or not started
+     * jobs.
      */
-    @Override
-    protected int getNrNodeViews() {
-        return 0;
-    }
+    public void cancel();
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    protected boolean hasDialog() {
-        return true;
-    }
 }

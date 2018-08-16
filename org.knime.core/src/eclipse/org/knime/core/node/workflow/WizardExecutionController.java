@@ -51,15 +51,20 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Stack;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Stream;
 
 import org.apache.commons.lang3.ArrayUtils;
+import org.knime.core.node.CanceledExecutionException;
+import org.knime.core.node.ExecutionMonitor;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeLogger;
 import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
+import org.knime.core.node.interactive.ViewRequestHandlingException;
 import org.knime.core.node.util.CheckUtils;
 import org.knime.core.node.web.ValidationError;
+import org.knime.core.node.wizard.WizardViewResponse;
 import org.knime.core.node.workflow.NodeID.NodeIDSuffix;
 
 /**
@@ -231,6 +236,37 @@ public final class WizardExecutionController extends WebResourceController imple
             try {
                 CheckUtils.checkState(hasCurrentWizardPageInternal(), "No current wizard page");
                 return loadValuesIntoPageInternal(viewContentMap, m_waitingSubnodes.get(0), true, false);
+            } finally {
+                NodeContext.removeLastContext();
+            }
+        }
+    }
+
+    /**
+     * Processes a request issued by a view by calling the appropriate methods on the corresponding node
+     * model and returns a future which can resolve a response object.
+     *
+     * @param nodeID the node id to which the request belongs to
+     * @param viewRequest The JSON serialized view request
+     * @param exec the execution monitor to set progress and check possible cancellation
+     * @return a {@link CompletableFuture} object, which can resolve a {@link WizardViewResponse}.
+     * @throws ViewRequestHandlingException If the request handling or response generation fails for any
+     * reason.
+     * @throws InterruptedException If the thread handling the request is interrupted.
+     * @throws CanceledExecutionException If the handling of the request was canceled e.g. by user
+     * intervention.
+     * @since 3.7
+     */
+    public WizardViewResponse processViewRequestOnCurrentPage(final String nodeID, final String viewRequest,
+        final ExecutionMonitor exec)
+        throws ViewRequestHandlingException, InterruptedException, CanceledExecutionException {
+        WorkflowManager manager = m_manager;
+        try (WorkflowLock lock = manager.lock()) {
+            checkDiscard();
+            NodeContext.pushContext(manager);
+            try {
+                CheckUtils.checkState(hasCurrentWizardPageInternal(), "No current wizard page");
+                return processViewRequestInternal(m_waitingSubnodes.get(0), nodeID, viewRequest, exec);
             } finally {
                 NodeContext.removeLastContext();
             }
