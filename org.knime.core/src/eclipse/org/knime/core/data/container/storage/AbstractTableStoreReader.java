@@ -49,11 +49,24 @@ package org.knime.core.data.container.storage;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.lang.management.ManagementFactory;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
+import java.util.WeakHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.commons.io.IOUtils;
+import org.eclipse.core.runtime.Platform;
 import org.knime.core.data.DataCell;
+import org.knime.core.data.DataTableSpec;
 import org.knime.core.data.DataType;
 import org.knime.core.data.DataTypeRegistry;
+import org.knime.core.data.RowIteratorBuilder;
+import org.knime.core.data.RowIteratorBuilder.DefaultRowIteratorBuilder;
 import org.knime.core.data.container.BlobDataCell.BlobAddress;
 import org.knime.core.data.container.BlobWrapperDataCell;
 import org.knime.core.data.container.Buffer;
@@ -63,7 +76,11 @@ import org.knime.core.data.container.ContainerTable;
 import org.knime.core.data.container.KNIMEStreamConstants;
 import org.knime.core.data.filestore.internal.FileStoreHandlerRepository;
 import org.knime.core.node.InvalidSettingsException;
+import org.knime.core.node.KNIMEConstants;
+import org.knime.core.node.NodeLogger;
 import org.knime.core.node.NodeSettingsRO;
+import org.knime.core.node.util.CheckUtils;
+import org.knime.core.util.PathUtils;
 
 /**
  * The abstract reader for reading specialized table formats.
@@ -75,6 +92,25 @@ import org.knime.core.node.NodeSettingsRO;
  */
 public abstract class AbstractTableStoreReader implements KNIMEStreamConstants {
 
+    /** The node logger for this class. */
+    private static final NodeLogger LOGGER = NodeLogger.getLogger(AbstractTableStoreReader.class);
+
+    private final File m_file;
+
+    private final DataTableSpec m_spec;
+
+    /**
+     * List of file iterators that look at this buffer. Need to close them when the node is reset and the file shall be
+     * deleted.
+     */
+    private final WeakHashMap<TableStoreCloseableRowIterator, Object> m_openIteratorSet;
+
+    /** Dummy object for the file iterator map. */
+    private static final Object DUMMY = new Object();
+
+    /** Number of open file input streams on m_binFile. */
+    private AtomicInteger m_nrOpenInputStreams = new AtomicInteger();
+
     private CellClassInfo[] m_shortCutsLookup;
 
     private FileStoreHandlerRepository m_fileStoreHandlerRepository;
@@ -85,6 +121,7 @@ public abstract class AbstractTableStoreReader implements KNIMEStreamConstants {
      * Constructs an abstract table store reader.
      *
      * @param binFile the local file from which to read
+     * @param spec Non-null spec of the table being read.
      * @param settings The settings (written by
      *            {@link AbstractTableStoreWriter#writeMetaInfoAfterWrite(org.knime.core.node.NodeSettingsWO)})
      * @param version The version as defined in the {@link Buffer} class
@@ -92,8 +129,11 @@ public abstract class AbstractTableStoreReader implements KNIMEStreamConstants {
      * @throws InvalidSettingsException thrown in case something goes wrong during de-serialization, e.g. a new version
      *             of a writer has been used which hasn't been installed on the current system.
      */
-    protected AbstractTableStoreReader(final File binFile, final NodeSettingsRO settings, final int version)
-        throws IOException, InvalidSettingsException {
+    protected AbstractTableStoreReader(final File binFile, final DataTableSpec spec, final NodeSettingsRO settings,
+        final int version) throws IOException, InvalidSettingsException {
+        m_file = CheckUtils.checkArgumentNotNull(binFile);
+        m_spec = CheckUtils.checkArgumentNotNull(spec);
+        m_openIteratorSet = new WeakHashMap<>();
         readMetaFromFile(settings, version);
     }
 
@@ -132,7 +172,31 @@ public abstract class AbstractTableStoreReader implements KNIMEStreamConstants {
         return m_fileStoreHandlerRepository;
     }
 
-    public abstract TableStoreCloseableRowIterator iterator() throws IOException;
+    /**
+     * Returns a row iterator which returns each row one-by-one from the table.
+     *
+     * @return row iterator
+     */
+    public abstract TableStoreCloseableRowIterator iterator();
+
+    /**
+     * Returns a {@link RowIteratorBuilder} that can be used to assemble more complex
+     * {@link TableStoreCloseableRowIterator}s that only iterate over parts of a table.
+     *
+     * @return a {@link RowIteratorBuilder} that can be used to assemble complex {@link TableStoreCloseableRowIterator}s
+     *
+     * @since 3.7
+     */
+    public RowIteratorBuilder<? extends TableStoreCloseableRowIterator> iteratorBuilder() {
+        return new DefaultRowIteratorBuilder<TableStoreCloseableRowIterator>(() -> iterator(), m_spec) {
+            @Override
+            public TableStoreCloseableRowIterator build() {
+                TableStoreCloseableRowIterator iterator = super.build();
+                registerNewIteratorInstance(iterator);
+                return iterator;
+            }
+        };
+    }
 
     /**
      * Reads meta information, such as the classes of serialized {@link DataCell} instances.
@@ -190,8 +254,7 @@ public abstract class AbstractTableStoreReader implements KNIMEStreamConstants {
 
             DataType elementType = null;
             if (single.containsKey(TableStoreFormat.CFG_CELL_SINGLE_ELEMENT_TYPE)) {
-                NodeSettingsRO subTypeConfig =
-                    single.getNodeSettings(TableStoreFormat.CFG_CELL_SINGLE_ELEMENT_TYPE);
+                NodeSettingsRO subTypeConfig = single.getNodeSettings(TableStoreFormat.CFG_CELL_SINGLE_ELEMENT_TYPE);
                 elementType = DataType.load(subTypeConfig);
             }
             try {
@@ -203,6 +266,24 @@ public abstract class AbstractTableStoreReader implements KNIMEStreamConstants {
             i++;
         }
         return shortCutsLookup;
+    }
+
+    /**
+     * Method for obtaining the {@link File} from which this reader reads.
+     *
+     * @return the file from which this reader reads
+     */
+    public File getFile() {
+        return m_file;
+    }
+
+    /**
+     * Method for obtaining the {@link DataTableSpec} beloning to the table read by this table store reader.
+     *
+     * @return the spec belonging to this reader, not null
+     */
+    protected final DataTableSpec getSpec() {
+        return m_spec;
     }
 
     /**
@@ -220,20 +301,109 @@ public abstract class AbstractTableStoreReader implements KNIMEStreamConstants {
         return m_shortCutsLookup[shortCutIndex];
     }
 
+    /**
+     * Register a new iterator with this buffer.
+     *
+     * @param it The iterator
+     */
+    protected synchronized void registerNewIteratorInstance (final TableStoreCloseableRowIterator it) {
+        LOGGER.debug("Opening input stream on file \"" + m_file.getAbsolutePath() + "\", "
+                + m_nrOpenInputStreams + " open streams");
+        it.setReader(this);
+        m_nrOpenInputStreams.incrementAndGet();
+        synchronized (m_openIteratorSet) {
+            m_openIteratorSet.put(it, DUMMY);
+        }
+    }
+
+    /**
+     * Clear all iterators handled by this reader.
+     */
+    public void clearIteratorInstances() {
+        synchronized (m_openIteratorSet) {
+            m_openIteratorSet.keySet().stream().filter(f -> f != null).forEach(f -> clearIteratorInstance(f, false));
+            m_openIteratorSet.clear();
+        }
+    }
+
+    /**
+     * Clear the argument iterator (free the allocated resources).
+     *
+     * @param it The iterator
+     * @param removeFromHash Whether to remove from global hash.
+     */
+    private synchronized void clearIteratorInstance(final TableStoreCloseableRowIterator it, final boolean removeFromHash) {
+        String closeMes =
+                (m_file != null) ? "Closing input stream on \"" + m_file.getAbsolutePath() + "\", " : "";
+        try {
+            if (it.performClose()) {
+                m_nrOpenInputStreams.decrementAndGet();
+                LOGGER.debug(closeMes + m_nrOpenInputStreams + " remaining", null);
+                if (removeFromHash) {
+                    synchronized (m_openIteratorSet) {
+                        m_openIteratorSet.remove(it);
+                    }
+                }
+            }
+        } catch (IOException ioe) {
+            LOGGER.debug(closeMes + "failed!", ioe);
+        }
+    }
+
+    private static List<OutputStream> DEBUG_STREAMS = new ArrayList<>();
+
+    static {
+        if (KNIMEConstants.ASSERTIONS_ENABLED && Platform.OS_LINUX.equals(Platform.getOS())) {
+            for (int i = 0; i < 10; i++) {
+                try {
+                    DEBUG_STREAMS.add(Files.newOutputStream(PathUtils.createTempFile("test", ".txt")));
+                } catch (IOException ex) {
+                    LOGGER.debug(ex.getMessage(), ex);
+                }
+            }
+        }
+    }
+
+    /** prints debug output to catch random failures on test system, see AP-7978. */
+    protected static void checkAndReportOpenFiles(final IOException ex) {
+        if (KNIMEConstants.ASSERTIONS_ENABLED && Platform.OS_LINUX.equals(Platform.getOS())) {
+            if (ex.getMessage().contains("Too many") || ex.getMessage().contains("Zu viele")) {
+                try {
+                    for (OutputStream os : DEBUG_STREAMS) {
+                        os.close();
+                    }
+                    DEBUG_STREAMS.clear();
+
+                    String pid = ManagementFactory.getRuntimeMXBean().getName();
+                    pid = pid.substring(0, pid.indexOf('@'));
+                    ProcessBuilder pb = new ProcessBuilder("lsof", "-p", pid);
+                    Process lsof = pb.start();
+                    try (InputStream is = lsof.getInputStream()) {
+                        LOGGER.debug("Currently open files: " + IOUtils.toString(is, "US-ASCII"));
+                    }
+                } catch (IOException e) {
+                    LOGGER.debug("Could not list open files: " + e.getMessage(), e);
+                }
+            }
+        }
+    }
+
     public static abstract class TableStoreCloseableRowIterator extends CloseableRowIterator {
-        private Buffer m_buffer;
+        private AbstractTableStoreReader m_reader;
 
         /**
-         * @param buffer the buffer to set
+         * @param reader the table store reader to set
+         *
+         * @since 3.7
          */
-        public void setBuffer(final Buffer buffer) {
-            m_buffer = buffer;
+        public void setReader(final AbstractTableStoreReader reader) {
+            m_reader = reader;
         }
 
         /** {@inheritDoc} */
         @Override
         public final void close() {
-            m_buffer.clearIteratorInstance(this, true);
+            m_reader.clearIteratorInstance(this, true);
         }
 
         public abstract boolean performClose() throws IOException;
