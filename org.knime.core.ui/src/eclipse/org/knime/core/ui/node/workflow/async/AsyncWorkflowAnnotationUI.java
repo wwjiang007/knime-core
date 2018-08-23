@@ -47,15 +47,12 @@
 package org.knime.core.ui.node.workflow.async;
 
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Supplier;
 
-import org.knime.core.node.NodeDialogPane;
-import org.knime.core.node.NotConfigurableException;
-import org.knime.core.node.workflow.NodeUIInformation;
-import org.knime.core.ui.node.workflow.NodeContainerUI;
+import org.knime.core.node.workflow.WorkflowAnnotation;
 
 /**
- * UI-interface that provides asynchronous versions of some methods of {@link NodeContainerUI} - see {@link AsyncUI}.
+ * UI-interface that provides asynchronous versions of some methods of {@link WorkflowAnnotation} - see also
+ * {@link AsyncUI}.
  *
  * @author Martin Horn, KNIME GmbH, Konstanz, Germany
  *
@@ -63,69 +60,17 @@ import org.knime.core.ui.node.workflow.NodeContainerUI;
  * @noextend This interface is not intended to be extended by clients.
  * @noreference This interface is not intended to be referenced by clients.
  */
-public interface AsyncNodeContainerUI extends NodeContainerUI, AsyncUI {
+public interface AsyncWorkflowAnnotationUI extends AsyncUI {
 
     /**
-     * {@inheritDoc}
-     */
-    @Override
-    default NodeDialogPane getDialogPaneWithSettings() throws NotConfigurableException {
-        throw new UnsupportedOperationException("Please use async method instead.");
-    }
-
-    /**
-     * Async version of {@link #getDialogPaneWithSettings()}.
+     * Async version of the method {@link WorkflowAnnotation#setDimension(int, int, int, int)}.
      *
-     * @return result as future that possibly throws a {@link NotConfigurableException} on
-     *         {@link CompletableFutureEx#getOrThrow()}
+     * @param x
+     * @param y
+     * @param width
+     * @param height
+     * @return a future for async use
      */
-    public CompletableFutureEx<NodeDialogPane, NotConfigurableException> getDialogPaneWithSettingsAsync();
+    CompletableFuture<Void> setDimensionAsync(final int x, final int y, final int width, final int height);
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    default void setUIInformation(final NodeUIInformation uiInformation) {
-        throw new UnsupportedOperationException("Please use async method instead");
-    }
-
-    /**
-     * Async version of {@link #setUIInformation(NodeUIInformation)}.
-     *
-     * @param uiInformation
-     * @return result as future
-     */
-    public CompletableFuture<Void> setUIInformationAsync(NodeUIInformation uiInformation);
-
-    /**
-     * {@inheritDoc}
-     *
-     * Narrow down return type to {@link AsyncWorkflowManagerUI}.
-     */
-    @Override
-    AsyncWorkflowManagerUI getParent();
-
-
-    /**
-     * Creates a new {@link CompletableFuture}.
-     *
-     * @param sup the actual stuff to run
-     * @return a new future
-     */
-    public static <U> CompletableFuture<U> future(final Supplier<U> sup) {
-        return CompletableFuture.supplyAsync(sup);
-    }
-
-    /**
-     * Creates a new {@link CompletableFutureEx}.
-     *
-     * @param sup the actual stuff to run
-     * @param exceptionClass the exception class that the future potentially throws on
-     *            {@link CompletableFutureEx#getOrThrow()}
-     * @return a new future
-     */
-    public static <U, E extends Exception> CompletableFutureEx<U, E> futureEx(final Supplier<U> sup,
-        final Class<E> exceptionClass) {
-        return new CompletableFutureEx<U, E>(CompletableFuture.supplyAsync(sup), exceptionClass);
-    }
 }

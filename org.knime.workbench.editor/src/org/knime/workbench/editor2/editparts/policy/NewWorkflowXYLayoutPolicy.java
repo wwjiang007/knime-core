@@ -61,7 +61,6 @@ import org.eclipse.gef.editpolicies.XYLayoutEditPolicy;
 import org.eclipse.gef.handles.MoveHandle;
 import org.eclipse.gef.requests.CreateRequest;
 import org.eclipse.swt.graphics.Cursor;
-import org.knime.core.node.workflow.NodeContainer;
 import org.knime.core.node.workflow.WorkflowManager;
 import org.knime.core.ui.node.workflow.NodeContainerUI;
 import org.knime.core.ui.node.workflow.WorkflowManagerUI;
@@ -114,20 +113,15 @@ public class NewWorkflowXYLayoutPolicy extends XYLayoutEditPolicy {
         Rectangle rect = ((Rectangle)constraint).getCopy();
         if (child.getModel() instanceof NodeContainerUI) {
             NodeContainerUI container = (NodeContainerUI)child.getModel();
-
-            if (!Wrapper.wraps(container, NodeContainer.class)) {
-                //not supported for others than ordinary NodeContainers
-                return null;
-            }
-
             NodeContainerEditPart nodePart = (NodeContainerEditPart)child;
             command =
-                    new ChangeNodeBoundsCommand(Wrapper.unwrapNC(container),
+                    new ChangeNodeBoundsCommand(container,
                             (NodeContainerFigure)nodePart.getFigure(), rect);
         } else if (child instanceof AbstractWorkflowPortBarEditPart) {
-            command =
-                    new ChangeWorkflowPortBarCommand(
-                            (AbstractWorkflowPortBarEditPart)child, rect);
+            //moving port bar so far only supported for WorkflowManager but not WorkflowManagerUI
+            if (Wrapper.wraps(((AbstractWorkflowPortBarEditPart)child).getNodeContainer(), WorkflowManager.class)) {
+                command = new ChangeWorkflowPortBarCommand((AbstractWorkflowPortBarEditPart)child, rect);
+            }
         } else if (child instanceof AnnotationEditPart) {
             AnnotationEditPart annoPart = (AnnotationEditPart)child;
             // TODO the workflow annotation could know what its WFM is?
@@ -135,12 +129,7 @@ public class NewWorkflowXYLayoutPolicy extends XYLayoutEditPolicy {
                     (WorkflowRootEditPart)annoPart.getParent();
             WorkflowManagerUI wm = root.getWorkflowManager();
 
-            if(!Wrapper.wraps(wm, WorkflowManager.class)) {
-                //not supported for others than an ordinary workflow manager
-                return null;
-            }
-
-            command = new ChangeAnnotationBoundsCommand(Wrapper.unwrapWFM(wm), annoPart, rect);
+            command = new ChangeAnnotationBoundsCommand(wm, annoPart, rect);
         }
         return command;
     }

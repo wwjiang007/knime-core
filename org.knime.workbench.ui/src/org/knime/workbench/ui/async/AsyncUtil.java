@@ -62,15 +62,20 @@ import org.eclipse.swt.widgets.Shell;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.progress.IProgressService;
 import org.knime.core.node.NodeLogger;
+import org.knime.core.node.workflow.WorkflowAnnotation;
 import org.knime.core.ui.node.workflow.NodeContainerUI;
 import org.knime.core.ui.node.workflow.WorkflowManagerUI;
 import org.knime.core.ui.node.workflow.async.AsyncNodeContainerUI;
+import org.knime.core.ui.node.workflow.async.AsyncUI;
+import org.knime.core.ui.node.workflow.async.AsyncWorkflowAnnotationUI;
 import org.knime.core.ui.node.workflow.async.AsyncWorkflowManagerUI;
 import org.knime.core.ui.node.workflow.async.CompletableFutureEx;
 import org.knime.core.util.SWTUtilities;
 
 /**
- * Helper methods to switch between the synchronous and asynchronous implementations of an interface (such as
+ * Provides helper methods to deal with asynchronous methods as provided by subclasses of the {@link AsyncUI}-interface.
+ *
+ * There are, e.g. helper methods to switch between the synchronous and asynchronous implementations of an interface (such as
  * {@link WorkflowManagerUI} and {@link AsyncWorkflowManagerUI}).
  *
  * In case of asynchronous methods, the provided helper methods will block till the result is available (i.e. the future
@@ -92,11 +97,11 @@ import org.knime.core.util.SWTUtilities;
  *
  * @author Martin Horn, KNIME GmbH, Konstanz, Germany
  */
-public class AsyncSwitch {
+public class AsyncUtil {
 
-    private static final NodeLogger LOGGER = NodeLogger.getLogger(AsyncSwitch.class);
+    private static final NodeLogger LOGGER = NodeLogger.getLogger(AsyncUtil.class);
 
-    private AsyncSwitch() {
+    private AsyncUtil() {
         //utility class
     }
 
@@ -117,26 +122,30 @@ public class AsyncSwitch {
         final Function<AsyncWorkflowManagerUI, CompletableFuture<? extends T>> asyncWfm, final WorkflowManagerUI wfm,
         final String waitingMessage) {
         if (wfm instanceof AsyncWorkflowManagerUI) {
-            final AtomicReference<T> ref = new AtomicReference<T>();
-            final AtomicReference<Throwable> exception = new AtomicReference<Throwable>();
-            try {
-                PlatformUI.getWorkbench().getProgressService().busyCursorWhile((monitor) -> {
-                    monitor.beginTask(waitingMessage, 100);
-                    try {
-                        ref.set(asyncWfm.apply((AsyncWorkflowManagerUI)wfm).get());
-                    } catch (ExecutionException e) {
-                        exception.set(e.getCause());
-                    }
-                });
-            } catch (InterruptedException | InvocationTargetException ex) {
-                exception.set(ex);
-            }
-            if (exception.get() != null) {
-                openDialogAndLog(exception.get(), waitingMessage);
-            }
-            return ref.get();
+            return waitForTermination(asyncWfm.apply((AsyncWorkflowManagerUI)wfm), waitingMessage);
         } else {
             return syncWfm.apply(wfm);
+        }
+    }
+
+    /**
+     * Almost the same as {@link #wfmAsyncSwitch(Function, Function, WorkflowManagerUI, String)} but for
+     * {@link NodeContainerUI}/{@link AsyncNodeContainerUI}.
+     *
+     *
+     * @param syncNc
+     * @param asyncNc
+     * @param nc
+     * @param waitingMessage
+     * @return the actual result, possibly after some waiting in the async case
+     */
+    public static <T> T ncAsyncSwitch(final Function<NodeContainerUI, T> syncNc,
+        final Function<AsyncNodeContainerUI, CompletableFuture<T>> asyncNc, final NodeContainerUI nc,
+        final String waitingMessage) {
+        if (nc instanceof AsyncNodeContainerUI) {
+            return waitForTermination(asyncNc.apply((AsyncNodeContainerUI)nc), waitingMessage);
+        } else {
+            return syncNc.apply(nc);
         }
     }
 
@@ -148,7 +157,7 @@ public class AsyncSwitch {
      * @param asyncWfm
      * @param wfm
      * @param waitingMessage
-     * @return the actual result, possibly after some waiting in the asynch case
+     * @return the actual result, possibly after some waiting in the async case
      * @throws E the expected exception
      */
     public static <T, E extends Exception> T wfmAsyncSwitchRethrow(
@@ -196,7 +205,7 @@ public class AsyncSwitch {
      * @param asyncNc
      * @param nc
      * @param waitingMessage
-     * @return the actual result, possibly after some waiting in the asynch case
+     * @return the actual result, possibly after some waiting in the async case
      * @throws E the expected exception
      */
     public static <T, E extends Exception> T ncAsyncSwitchRethrow(final RethrowFunction<NodeContainerUI, T, E> syncNc,
@@ -232,6 +241,54 @@ public class AsyncSwitch {
         } else {
             return syncNc.apply(nc);
         }
+    }
+
+    /**
+     * Almost the same as {@link #wfmAsyncSwitch(Function, Function, WorkflowManagerUI, String)} but for
+     * {@link WorkflowAnnotation}/{@link AsyncWorkflowAnnotationUI}.
+     *
+     * @param syncWa
+     * @param asyncWa
+     * @param wa
+     * @param waitingMessage
+     * @return the actual result, possibly after some waiting in the async case
+     */
+    public static <T> T waAsyncSwitch(final Function<WorkflowAnnotation, T> syncWa,
+        final Function<AsyncWorkflowAnnotationUI, CompletableFuture<T>> asyncWa, final WorkflowAnnotation wa,
+        final String waitingMessage) {
+        if (wa instanceof AsyncWorkflowAnnotationUI) {
+            return waitForTermination(asyncWa.apply((AsyncWorkflowAnnotationUI)wa), waitingMessage);
+        } else {
+            return syncWa.apply(wa);
+        }
+    }
+
+    /**
+     * Waits for the provided future to complete while showing a busy cursor and later a 'waiting'-dialog.
+     *
+     * @param future future to wait to be completed
+     * @param waitingMessage the message to be displayed in the waiting dialog
+     * @return the future's result when done
+     */
+    public static <T> T waitForTermination(final CompletableFuture<T> future, final String waitingMessage) {
+        final AtomicReference<T> ref = new AtomicReference<T>();
+        final AtomicReference<Throwable> exception = new AtomicReference<Throwable>();
+        try {
+            PlatformUI.getWorkbench().getProgressService().busyCursorWhile((monitor) -> {
+                monitor.beginTask(waitingMessage, 100);
+                try {
+                    ref.set(future.get());
+                } catch (ExecutionException e) {
+                    exception.set(e.getCause());
+                }
+            });
+        } catch (InterruptedException | InvocationTargetException ex) {
+            exception.set(ex);
+        }
+        if (exception.get() != null) {
+            openDialogAndLog(exception.get(), waitingMessage);
+        }
+        return ref.get();
     }
 
     /**
