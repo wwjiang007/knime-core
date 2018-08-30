@@ -88,41 +88,41 @@ public class BitVectorPerformanceComparisonBug1532 {
     @Test
     public void testCompareTanimotoTime() throws Throwable {
         final long seed = System.currentTimeMillis();
-        int size = 5000;
+        int size = 128;
         // NOTE (BW), 22 Oct 2008:
         // If you set the length to 2048 the test case seems to succeed
         // more often than with a random length (as below)
-        int length = 1000 + new Random(seed).nextInt(2000);
+        int length = 16384 + new Random(seed).nextInt(16384);
         NodeLogger.getLogger(BitVectorPerformanceComparisonBug1532.class).info("Using seed " + seed);
         DenseBitVectorCell[] newCells = createNewDenseBitVectorCells(
                 size, length, seed);
         BitVectorCell[] oldCells = createOldBitVectorCells(size, length, seed);
         double[] newValues = new double[size * (size - 1) / 2];
         double[] oldValues = new double[size * (size - 1) / 2];
-        long time = System.currentTimeMillis();
+        long time = System.nanoTime();
         int point = 0;
         for (int i = 0; i < size; i++) {
             for (int j = i + 1; j < size; j++) {
                 newValues[point++] = getNewTanimoto(newCells[i], newCells[j]);
             }
         }
-        long timeForNew = System.currentTimeMillis() - time;
-        time = System.currentTimeMillis();
+        long timeForNew = System.nanoTime() - time;
+        time = System.nanoTime();
         point = 0;
         for (int i = 0; i < size; i++) {
             for (int j = i + 1; j < size; j++) {
                 oldValues[point++] = getOldTanimoto(oldCells[i], oldCells[j]);
             }
         }
-        long timeForOld = System.currentTimeMillis() - time;
+        long timeForOld = System.nanoTime() - time;
         NodeLogger.getLogger(BitVectorPerformanceComparisonBug1532.class).info(
             "tanimoto calculation old: " + timeForOld);
         NodeLogger.getLogger(BitVectorPerformanceComparisonBug1532.class).info(
             "tanimoto calculation new: " + timeForNew);
         /* Note: increased the factor to 2 according to ticket AP-9319. */
         assertTrue("Tanimoto calculation of new bit vector cells takes much " +
-                "longer than calculation on old (java) bit vectors: " + timeForNew + "ms vs. " + timeForOld + "ms",
-                timeForNew < 2 * timeForOld);
+                "longer than calculation on old (java) bit vectors: " + timeForNew + "ns vs. " + timeForOld + "ns",
+                timeForNew < 1.2 * timeForOld);
     }
 
 
