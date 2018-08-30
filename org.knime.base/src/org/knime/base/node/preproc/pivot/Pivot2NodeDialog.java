@@ -47,17 +47,23 @@ package org.knime.base.node.preproc.pivot;
 
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import javax.swing.BorderFactory;
+import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
 import org.knime.base.node.preproc.groupby.GroupByNodeDialog;
+import org.knime.base.node.preproc.pivot.Pivot2NodeModel.ColNameOption;
 import org.knime.core.data.DataTableSpec;
 import org.knime.core.data.DataValue;
 import org.knime.core.node.InvalidSettingsException;
@@ -66,8 +72,9 @@ import org.knime.core.node.NodeSettingsWO;
 import org.knime.core.node.NotConfigurableException;
 import org.knime.core.node.defaultnodesettings.DialogComponentBoolean;
 import org.knime.core.node.defaultnodesettings.DialogComponentColumnFilter;
-import org.knime.core.node.defaultnodesettings.SettingsModelBoolean;
+import org.knime.core.node.defaultnodesettings.DialogComponentStringSelection;
 import org.knime.core.node.defaultnodesettings.SettingsModelFilterString;
+import org.knime.core.node.defaultnodesettings.SettingsModelString;
 import org.knime.core.node.port.PortObjectSpec;
 import org.knime.core.node.util.ColumnFilterPanel;
 
@@ -89,10 +96,14 @@ public class Pivot2NodeDialog extends GroupByNodeDialog {
 
     private final DialogComponentBoolean m_domainComponent;
 
+    private DialogComponentStringSelection m_colNameAggComponent;
+
+    private DialogComponentBoolean m_sortingComponent;
+
     /** Constructor for class Pivot2NodeDialog. */
     @SuppressWarnings("unchecked")
     public Pivot2NodeDialog() {
-//pivot column box
+        //pivot column box
         m_pivotCol = new DialogComponentColumnFilter(m_pivotCols, 0, false,
             new ColumnFilterPanel.ValueClassFilter(DataValue.class), false);
         //we are only interested in showing the invalid include columns
@@ -108,29 +119,25 @@ public class Pivot2NodeDialog extends GroupByNodeDialog {
         });
         final JPanel pivotColPanel = m_pivotCol.getComponentPanel();
         pivotColPanel.setLayout(new GridLayout(1, 1));
-        pivotColPanel.setBorder(BorderFactory.createTitledBorder(BorderFactory
-                .createEtchedBorder(), " Pivot settings "));
+        pivotColPanel
+            .setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), " Pivot settings "));
 
-//create missing value option
-        m_missComponent = new DialogComponentBoolean(
-                createSettingsMissingValues(), "Ignore missing values");
-        m_missComponent.setToolTipText("Ignore rows "
-            + "containing missing values in pivot column.");
+        //create missing value option
+        m_missComponent =
+            new DialogComponentBoolean(Pivot2NodeModel.createSettingsMissingValues(), "Ignore missing values");
+        m_missComponent.setToolTipText("Ignore rows " + "containing missing values in pivot column.");
 
-//create total aggregation option
-        m_totalComponent = new DialogComponentBoolean(
-                createSettingsTotal(), "Append overall totals");
+        //create total aggregation option
+        m_totalComponent = new DialogComponentBoolean(Pivot2NodeModel.createSettingsTotal(), "Append overall totals");
         m_missComponent.setToolTipText("Appends the overall pivot totals with "
-                + "each aggregation performed together on all selected pivot "
-                + "columns.");
+            + "each aggregation performed together on all selected pivot " + "columns.");
 
-//create domain option
-        m_domainComponent = new DialogComponentBoolean(
-                createSettingsIgnoreDomain(), "Ignore domain");
-        m_domainComponent.setToolTipText("Ignore domain and use only the "
-            + "possible values available in the input data.");
+        //create domain option
+        m_domainComponent = new DialogComponentBoolean(Pivot2NodeModel.createSettingsIgnoreDomain(), "Ignore domain");
+        m_domainComponent
+            .setToolTipText("Ignore domain and use only the " + "possible values available in the input data.");
 
-//build pivot column filter and missing value panel
+        //build pivot column filter and missing value panel
         JPanel pivotAllPanel = new JPanel(new BorderLayout());
         pivotAllPanel.add(pivotColPanel, BorderLayout.CENTER);
         JPanel pivotOptions = new JPanel(new FlowLayout());
@@ -141,19 +148,58 @@ public class Pivot2NodeDialog extends GroupByNodeDialog {
         addPanel(pivotAllPanel, "Pivots", 1);
     }
 
-    /** @return settings model boolean for ignoring missing values */
-    static final SettingsModelBoolean createSettingsMissingValues() {
-        return new SettingsModelBoolean("missing_values", true);
-    }
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    protected JComponent createAdvancedOptionsBox() {
+        final SettingsModelString colNameModel = Pivot2NodeModel.createSettingsColNameOption();
+        m_colNameAggComponent = new DialogComponentStringSelection(colNameModel, "Column name:",
+            Arrays.stream(ColNameOption.values())//
+                .map(val -> val.toString())//
+                .collect(Collectors.toList())//
+        );
 
-    /** @return settings model boolean for total aggregation */
-    static final SettingsModelBoolean createSettingsTotal() {
-        return new SettingsModelBoolean("total_aggregation", false);
-    }
+        m_sortingComponent =
+            new DialogComponentBoolean(Pivot2NodeModel.createSettingsLexicographical(), "Sort lexicographically");
 
-    /** @return settings model boolean for ignoring domain */
-    static final SettingsModelBoolean createSettingsIgnoreDomain() {
-        return new SettingsModelBoolean("ignore_domain", true);
+        final JPanel rootPanel = new JPanel(new GridBagLayout());
+        rootPanel
+            .setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), " Advanced settings "));
+        final GridBagConstraints c = new GridBagConstraints();
+        c.anchor = GridBagConstraints.LINE_START;
+        c.weightx = 0;
+        c.weighty = 0;
+        c.fill = GridBagConstraints.NONE;
+        c.gridx = 0;
+        c.gridy = 0;
+        rootPanel.add(m_colNameAggComponent.getComponentPanel(), c);
+
+        c.gridx += 1;
+        c.gridwidth = 3;
+        rootPanel.add(createColNamePolicyDialog("Aggregation name:", null).getComponentPanel(), c);
+
+        c.gridwidth = 1;
+        c.gridx += 3;
+        rootPanel.add(m_sortingComponent.getComponentPanel(), c);
+
+        c.gridy++;
+        c.gridx = 0;
+        rootPanel.add(createMaxNoneNumValsDialog().getComponentPanel(), c);
+
+        c.gridx++;
+        rootPanel.add(createValueDelDialog().getComponentPanel(), c);
+
+        c.gridx++;
+        rootPanel.add(createInMemoryDialog().getComponentPanel(), c);
+
+        c.gridx++;
+        rootPanel.add(createRetainOrderDialog().getComponentPanel(), c);
+
+        ++c.gridx;
+        rootPanel.add(createHiliteDialog().getComponentPanel(), c);
+
+        return rootPanel;
     }
 
     /** {@inheritDoc} */
@@ -166,20 +212,21 @@ public class Pivot2NodeDialog extends GroupByNodeDialog {
 
     /** {@inheritDoc} */
     @Override
-    protected void loadSettingsFrom(final NodeSettingsRO settings,
-            final PortObjectSpec[] specs) throws NotConfigurableException {
+    protected void loadSettingsFrom(final NodeSettingsRO settings, final PortObjectSpec[] specs)
+        throws NotConfigurableException {
         final DataTableSpec spec = (DataTableSpec)specs[0];
-        m_pivotCol.loadSettingsFrom(settings, new DataTableSpec[] {spec});
+        m_pivotCol.loadSettingsFrom(settings, new DataTableSpec[]{spec});
         m_missComponent.loadSettingsFrom(settings, specs);
         m_totalComponent.loadSettingsFrom(settings, specs);
         m_domainComponent.loadSettingsFrom(settings, specs);
+        m_colNameAggComponent.loadSettingsFrom(settings, specs);
+        m_sortingComponent.loadSettingsFrom(settings, specs);
         super.loadSettingsFrom(settings, specs);
     }
 
     /** {@inheritDoc} */
     @Override
-    protected void saveSettingsTo(final NodeSettingsWO settings)
-            throws InvalidSettingsException {
+    protected void saveSettingsTo(final NodeSettingsWO settings) throws InvalidSettingsException {
         super.saveSettingsTo(settings);
         //check if the dialog contains invalid pivot columns
         final Set<String> invalidInclCols = m_pivotCol.getInvalidIncludeColumns();
@@ -190,6 +237,8 @@ public class Pivot2NodeDialog extends GroupByNodeDialog {
         m_missComponent.saveSettingsTo(settings);
         m_totalComponent.saveSettingsTo(settings);
         m_domainComponent.saveSettingsTo(settings);
+        m_colNameAggComponent.saveSettingsTo(settings);
+        m_sortingComponent.saveSettingsTo(settings);
     }
 
 }
