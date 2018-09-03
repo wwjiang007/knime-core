@@ -52,11 +52,13 @@ import static org.knime.core.ui.wrapper.Wrapper.wraps;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
 import org.eclipse.gef.EditPartViewer;
+import org.eclipse.swt.widgets.Display;
 import org.knime.core.node.workflow.ConnectionID;
 import org.knime.core.node.workflow.ConnectionUIInformation;
 import org.knime.core.node.workflow.NodeID;
@@ -64,6 +66,7 @@ import org.knime.core.node.workflow.NodeUIInformation;
 import org.knime.core.node.workflow.WorkflowAnnotation;
 import org.knime.core.node.workflow.WorkflowAnnotationID;
 import org.knime.core.node.workflow.WorkflowCopyContent;
+import org.knime.core.node.workflow.WorkflowManager;
 import org.knime.core.node.workflow.WorkflowPersistor;
 import org.knime.core.ui.node.workflow.ConnectionContainerUI;
 import org.knime.core.ui.node.workflow.NodeContainerUI;
@@ -118,6 +121,10 @@ public final class PasteFromWorkflowPersistorCommand
         }
         WorkflowCopyUI wfCopy = m_clipboardObject.getWorkflowCopy();
         if (wraps(wfCopy, WorkflowPersistor.class)) {
+            if (!wraps(getHostWFMUI(), WorkflowManager.class)) {
+                //cross copies from WorkflowManager to WorkflowManagerUI not possible, yet
+                return false;
+            }
             //persistor for local workflows
             WorkflowPersistor copyPersistor = unwrap(wfCopy, WorkflowPersistor.class);
             if (!copyPersistor.getNodeLoaderMap().isEmpty()) {
@@ -127,6 +134,10 @@ public final class PasteFromWorkflowPersistorCommand
                 return true;
             }
         } else {
+            if (wraps(getHostWFMUI(), WorkflowManager.class)) {
+                //cross copies from WorkflowManager to WorkflowManagerUI not possible, yet
+                return false;
+            }
             return true;
         }
         return false;
@@ -180,6 +191,8 @@ public final class PasteFromWorkflowPersistorCommand
             for (WorkflowAnnotation a : pastedAnnos) {
                 a.shiftPosition(moveDist[0], moveDist[1]);
             }
+            setFutureSelection(pastedContent.getNodeIDs(),
+                Arrays.asList(manager.getWorkflowAnnotations(pastedContent.getAnnotationIDs())));
             return pastedContent;
         }, wfm -> {
             //in case of async workflow managers:
@@ -193,15 +206,15 @@ public final class PasteFromWorkflowPersistorCommand
             m_shiftCalculator = new FixedShiftCalculator(shift);
             wfCopyOffset.setXShift(shift[0]);
             wfCopyOffset.setYShift(shift[1]);
+
+            Display.getDefault().syncExec(() -> {
+                setFutureSelection(WorkflowRootEditPart.ALL_NEW_NODES, WorkflowRootEditPart.ALL_NEW_ANNOTATIONS);
+            });
             return wfm.pasteAsync(wfCopyOffset);
         }, manager, "Pasting workflow parts ...");
+    }
 
-        if (m_pastedContent == null) {
-            //can happen, if workflow copy is not available on the server anymore
-            //will almost never happen
-            return;
-        }
-
+    private void setFutureSelection(final NodeID[] nodeIds, final Collection<WorkflowAnnotation> was) {
         EditPartViewer partViewer = m_editor.getViewer();
         partViewer.deselectAll();
         // select the new ones....
@@ -211,9 +224,8 @@ public final class PasteFromWorkflowPersistorCommand
             WorkflowRootEditPart rootEditPart =
                     (WorkflowRootEditPart)partViewer.getRootEditPart()
                             .getContents();
-            rootEditPart.setFutureSelection(m_pastedContent.getNodeIDs());
-            rootEditPart.setFutureAnnotationSelection(
-                    Arrays.asList(manager.getWorkflowAnnotations(m_pastedContent.getAnnotationIDs())));
+            rootEditPart.setFutureSelection(nodeIds);
+            rootEditPart.setFutureAnnotationSelection(was);
         }
     }
 
