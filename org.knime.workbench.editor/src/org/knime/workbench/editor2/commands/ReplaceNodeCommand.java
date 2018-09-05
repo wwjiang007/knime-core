@@ -69,21 +69,21 @@ public class ReplaceNodeCommand extends CreateNodeCommand {
 
     private DeleteCommand m_delete;
 
-    private ReplaceHelper m_rh;
+    private ReplaceHelper m_replaceHelper;
 
     /**
      * @param manager the workflow manager
      * @param factory the node factory
      * @param location the insert location of the new metanode
      * @param snapToGrid should metanode snap to grid
-     * @param node which will be replaced by this node
+     * @param nodeToReplace which will be replaced by this node
      */
     public ReplaceNodeCommand(final WorkflowManager manager, final NodeFactory<? extends NodeModel> factory,
         final Point location, final boolean snapToGrid, final NodeContainerEditPart nodeToReplace) {
         super(manager, factory, location, snapToGrid);
         m_node = nodeToReplace;
         m_root = nodeToReplace.getRoot();
-        m_rh = new ReplaceHelper(manager, Wrapper.unwrapNC(m_node.getNodeContainer()));
+        m_replaceHelper = new ReplaceHelper(manager, Wrapper.unwrapNC(m_node.getNodeContainer()));
 
         // delete command handles undo action (restoring connections and positions)
         m_delete = new DeleteCommand(Collections.singleton(m_node), manager);
@@ -94,7 +94,7 @@ public class ReplaceNodeCommand extends CreateNodeCommand {
      */
     @Override
     public boolean canExecute() {
-        return super.canExecute() && m_delete.canExecute() && m_rh.replaceNode();
+        return super.canExecute() && m_delete.canExecute() && m_replaceHelper.replaceNode();
     }
 
     /**
@@ -104,7 +104,8 @@ public class ReplaceNodeCommand extends CreateNodeCommand {
     public void execute() {
         m_delete.execute();
         super.execute();
-        m_rh.reconnect(Wrapper.unwrapNC(m_container));
+        m_replaceHelper.setConnectionUIInfoMap(m_delete.getConnectionUIInfo());
+        m_replaceHelper.reconnect(Wrapper.unwrapNC(m_container));
         // the connections are not always properly re-drawn after "unmark". (Eclipse bug.) Repaint here.
         m_root.refresh();
 

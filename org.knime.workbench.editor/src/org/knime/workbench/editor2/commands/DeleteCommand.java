@@ -52,8 +52,11 @@ import static org.knime.workbench.ui.async.AsyncUtil.wfmAsyncSwitchRethrow;
 
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
@@ -61,6 +64,7 @@ import java.util.function.Supplier;
 import org.eclipse.gef.EditPartViewer;
 import org.knime.core.node.workflow.Annotation;
 import org.knime.core.node.workflow.ConnectionID;
+import org.knime.core.node.workflow.ConnectionUIInformation;
 import org.knime.core.node.workflow.NodeID;
 import org.knime.core.node.workflow.WorkflowAnnotation;
 import org.knime.core.node.workflow.WorkflowAnnotationID;
@@ -89,14 +93,18 @@ public class DeleteCommand extends AbstractKNIMECommand {
     /** References to annotations being deleted. */
     private final WorkflowAnnotationID[] m_annotationIDs;
 
-    /** Array containing connections that are to be deleted and which are not
-     * part of the persistor (perisistor only covers connections whose source
-     * and destination is part of the persistor as well). */
+    /**
+     * Array containing connections that are to be deleted and which are not part of the persistor (perisistor only
+     * covers connections whose source and destination is part of the persistor as well).
+     */
     private final ConnectionContainerUI[] m_connections;
 
-    /** Number of connections that will be deleted upon execute(). This includes
-     * m_connections and all connections covered by the persistor. This number
-     * is at least m_connections.length.
+    /** A Map from ConnectionTerminiWrapper to the connection UI info **/
+    private final Map<ConnectionTerminiWrapper, ConnectionUIInformation> m_connectionUIInfoMap;
+
+    /**
+     * Number of connections that will be deleted upon execute(). This includes m_connections and all connections
+     * covered by the persistor. This number is at least m_connections.length.
      */
     private final int m_connectionCount;
 
@@ -123,14 +131,12 @@ public class DeleteCommand extends AbstractKNIMECommand {
      * @param editParts Selected nodes and connections and annotations
      * @param manager wfm hosting the nodes.
      */
-    public DeleteCommand(final Collection<?> editParts,
-            final WorkflowManagerUI manager) {
+    public DeleteCommand(final Collection<?> editParts, final WorkflowManagerUI manager) {
         super(manager);
-        Set<NodeID> idSet = new LinkedHashSet<NodeID>();
-        Set<WorkflowAnnotationID> annotationSet =
-            new LinkedHashSet<WorkflowAnnotationID>();
-        Set<ConnectionContainerUI> conSet =
-            new LinkedHashSet<ConnectionContainerUI>();
+
+        final Set<NodeID> idSet = new LinkedHashSet<NodeID>();
+        final Set<WorkflowAnnotationID> annotationSet = new LinkedHashSet<WorkflowAnnotationID>();
+        final Set<ConnectionContainerUI> conSet = new LinkedHashSet<ConnectionContainerUI>();
         EditPartViewer viewer = null;
         for (Object p : editParts) {
             if (p instanceof NodeContainerEditPart) {
@@ -155,8 +161,7 @@ public class DeleteCommand extends AbstractKNIMECommand {
                 conSet.addAll(manager.getIncomingConnectionsFor(id));
                 conSet.addAll(manager.getOutgoingConnectionsFor(id));
             } else if (p instanceof ConnectionContainerEditPart) {
-                ConnectionContainerEditPart ccep =
-                    (ConnectionContainerEditPart)p;
+                ConnectionContainerEditPart ccep = (ConnectionContainerEditPart)p;
                 conSet.add(ccep.getModel());
                 if (viewer == null && ccep.getParent() != null) {
                     viewer = ccep.getViewer();
@@ -180,15 +185,20 @@ public class DeleteCommand extends AbstractKNIMECommand {
 
         m_connectionCount = conSet.size();
         // remove all connections that will be contained in the persistor
-        for (Iterator<ConnectionContainerUI> it = conSet.iterator();
-        it.hasNext();) {
+        for (final Iterator<ConnectionContainerUI> it = conSet.iterator(); it.hasNext();) {
             ConnectionContainerUI c = it.next();
             if (idSet.contains(c.getSource()) && idSet.contains(c.getDest())) {
                 it.remove();
             }
         }
 
-        m_connections = conSet.toArray(new ConnectionContainerUI[conSet.size()]);
+        m_connections = conSet.toArray(new ConnectionContainerUI[m_connectionCount]);
+
+        HashMap<ConnectionTerminiWrapper, ConnectionUIInformation> uiInfoMap = new HashMap<>();
+        for (final ConnectionContainerUI cc : m_connections) {
+            uiInfoMap.put(new ConnectionTerminiWrapper(cc), cc.getUIInfo());
+        }
+        m_connectionUIInfoMap = Collections.unmodifiableMap(uiInfoMap);
     }
 
     /** {@inheritDoc} */
@@ -328,5 +338,101 @@ public class DeleteCommand extends AbstractKNIMECommand {
     /** @return the number of workflow annotations to be deleted. */
     public int getAnnotationCount() {
         return m_annotationIDs.length;
+    }
+
+    /**
+     * @return an unmodifiable map, mapping the connection termini (node id + port of source and destination) to the ui
+     *         info for the connection
+     */
+    public Map<ConnectionTerminiWrapper, ConnectionUIInformation> getConnectionUIInfo() {
+        return m_connectionUIInfoMap;
+    }
+
+
+    /**
+     * I was going to implement hashCode for ConnectionContainerUI, since it doesn't implement its own, which does this
+     * sort of thing but i was then worried what i might be breaking something elsewhere that relied on that class
+     * having a default hashCode implementation. (TODO)
+     *
+     * @author loki der quaeler
+     */
+    static class ConnectionTerminiWrapper {
+        private final NodeID m_sourceNodeId;
+        private final int m_sourcePort;
+
+        private final NodeID m_destinationNodeId;
+        private final int m_destinationPort;
+
+        ConnectionTerminiWrapper (final ConnectionContainerUI cc) {
+            this(cc.getSource(), cc.getSourcePort(), cc.getDest(), cc.getDestPort());
+        }
+
+        ConnectionTerminiWrapper(final NodeID sourceId, final int sourcePort, final NodeID destinationId,
+            final int destinationPort) {
+            m_sourceNodeId = sourceId;
+            m_sourcePort = sourcePort;
+
+            m_destinationNodeId = destinationId;
+            m_destinationPort = destinationPort;
+        }
+
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        public int hashCode() {
+            final int prime = 31;
+            int result = prime + ((m_destinationNodeId == null) ? 0 : m_destinationNodeId.hashCode());
+
+            result = (prime * result) + m_destinationPort;
+            result = (prime * result) + ((m_sourceNodeId == null) ? 0 : m_sourceNodeId.hashCode());
+
+            return (prime * result) + m_sourcePort;
+        }
+
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        public boolean equals(final Object obj) {
+            if (this == obj) {
+                return true;
+            }
+
+            if (obj == null) {
+                return false;
+            }
+
+            if (getClass() != obj.getClass()) {
+                return false;
+            }
+
+            final ConnectionTerminiWrapper other = (ConnectionTerminiWrapper)obj;
+            if (m_destinationNodeId == null) {
+                if (other.m_destinationNodeId != null) {
+                    return false;
+                }
+            } else if (!m_destinationNodeId.equals(other.m_destinationNodeId)) {
+                return false;
+            }
+
+            if (m_destinationPort != other.m_destinationPort) {
+                return false;
+            }
+
+            if (m_sourceNodeId == null) {
+                if (other.m_sourceNodeId != null) {
+                    return false;
+                }
+            } else if (!m_sourceNodeId.equals(other.m_sourceNodeId)) {
+                return false;
+            }
+
+            if (m_sourcePort != other.m_sourcePort) {
+                return false;
+            }
+
+            return true;
+        }
     }
 }

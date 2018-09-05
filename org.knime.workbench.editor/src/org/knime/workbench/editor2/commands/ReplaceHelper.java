@@ -51,12 +51,14 @@ package org.knime.workbench.editor2.commands;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Map;
 
 import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.jface.dialogs.MessageDialogWithToggle;
 import org.eclipse.jface.preference.IPreferenceStore;
 import org.knime.core.node.port.flowvariable.FlowVariablePortObject;
 import org.knime.core.node.workflow.ConnectionContainer;
+import org.knime.core.node.workflow.ConnectionUIInformation;
 import org.knime.core.node.workflow.NodeContainer;
 import org.knime.core.node.workflow.NodeID;
 import org.knime.core.node.workflow.NodeUIInformation;
@@ -66,7 +68,6 @@ import org.knime.workbench.ui.KNIMEUIPlugin;
 import org.knime.workbench.ui.preferences.PreferenceConstants;
 
 /**
- *
  * @author Tim-Oliver Buchholz, KNIME AG, Zurich, Switzerland
  */
 public class ReplaceHelper {
@@ -92,7 +93,7 @@ public class ReplaceHelper {
 
     private NodeContainer m_oldNode;
 
-
+    private Map<DeleteCommand.ConnectionTerminiWrapper, ConnectionUIInformation> m_connectionUIInfoMap;
 
     /**
      * @param wfm the workflow manager
@@ -107,7 +108,6 @@ public class ReplaceHelper {
         // sort according to ports
         Collections.sort(m_incomingConnections, DEST_PORT_SORTER);
         Collections.sort(m_outgoingConnections, SOURCE_PORT_SORTER);
-
     }
 
     /**
@@ -145,29 +145,39 @@ public class ReplaceHelper {
     }
 
     /**
+     * This should be called prior to invoking <code>reconnect(NodeContainer)</code>.
+     *
+     * @param map a map between the termini of a connection (node + port for source and destination) and the UI info of
+     *            that connection; this map will be referenced directly and not cloned
+     */
+    public void setConnectionUIInfoMap(final Map<DeleteCommand.ConnectionTerminiWrapper, ConnectionUIInformation> map) {
+        m_connectionUIInfoMap = map;
+    }
+
+    /**
      * Connects new node with connection of the old node.
      *
      * @param container new node container
      */
     public void reconnect(final NodeContainer container) {
-
         // reset node location
-        NodeUIInformation uiInformation = m_oldNode.getUIInformation();
-        int[] bounds = uiInformation.getBounds();
-        NodeUIInformation info = NodeUIInformation.builder()
-                .setNodeLocation(bounds[0], bounds[1], -1, -1)
-                .setHasAbsoluteCoordinates(true)
-                .setSnapToGrid(uiInformation.getSnapToGrid())
-                .setIsDropLocation(false).build();
+        final NodeUIInformation uiInformation = m_oldNode.getUIInformation();
+        final int[] bounds = uiInformation.getBounds();
+        final NodeUIInformation info = NodeUIInformation.builder()
+                                                        .setNodeLocation(bounds[0], bounds[1], -1, -1)
+                                                        .setHasAbsoluteCoordinates(true)
+                                                        .setSnapToGrid(uiInformation.getSnapToGrid())
+                                                        .setIsDropLocation(false).build();
+
         container.setUIInformation(info);
 
         int inShift;
         int outShift;
 
-        if (m_oldNode instanceof WorkflowManager && !(container instanceof WorkflowManager)) {
+        if ((m_oldNode instanceof WorkflowManager) && !(container instanceof WorkflowManager)) {
             inShift = 0;
             // replacing a metanode (no opt. flow var ports) with a "normal" node (that has optional flow var ports)
-            if (m_oldNode.getNrInPorts() > 0 && container.getNrInPorts() > 1) {
+            if ((m_oldNode.getNrInPorts() > 0) && (container.getNrInPorts() > 1)) {
                 // shift ports one index - unless we need to use the invisible optional flow var port of new node
                 if (!m_oldNode.getInPort(0).getPortType().equals(FlowVariablePortObject.TYPE)) {
                     inShift = 1;
@@ -177,17 +187,17 @@ public class ReplaceHelper {
             }
 
             outShift = 0;
-            if (m_oldNode.getNrOutPorts() > 0 && container.getNrOutPorts() > 1) {
+            if ((m_oldNode.getNrOutPorts() > 0) && (container.getNrOutPorts() > 1)) {
                 if (!m_oldNode.getOutPort(0).getPortType().equals(FlowVariablePortObject.TYPE)) {
                     outShift = 1;
                 } else if (container.getOutPort(1).getPortType().equals(FlowVariablePortObject.TYPE)) {
                     outShift = 1;
                 }
             }
-        } else if (!(m_oldNode instanceof WorkflowManager) && container instanceof WorkflowManager) {
+        } else if (!(m_oldNode instanceof WorkflowManager) && (container instanceof WorkflowManager)) {
             // replacing a "normal" node with a metanode
             inShift = -1;
-            for (ConnectionContainer cc : m_incomingConnections) {
+            for (final ConnectionContainer cc : m_incomingConnections) {
                 if (cc.getDestPort() == 0) {
                     inShift = 0;
                     break;
@@ -195,7 +205,7 @@ public class ReplaceHelper {
             }
 
             outShift = -1;
-            for (ConnectionContainer cc : m_outgoingConnections) {
+            for (final ConnectionContainer cc : m_outgoingConnections) {
                 if (cc.getSourcePort() == 0) {
                     outShift = 0;
                     break;
@@ -207,23 +217,49 @@ public class ReplaceHelper {
         }
 
         // set incoming connections
-        NodeID newId = container.getID();
-        for (ConnectionContainer c : m_incomingConnections) {
+        final NodeID newId = container.getID();
+        for (final ConnectionContainer c : m_incomingConnections) {
             if (m_wfm.canAddConnection(c.getSource(), c.getSourcePort(), newId, c.getDestPort() + inShift)) {
-                m_wfm.addConnection(c.getSource(), c.getSourcePort(), newId, c.getDestPort() + inShift);
+                final ConnectionContainer cc =
+                    m_wfm.addConnection(c.getSource(), c.getSourcePort(), newId, c.getDestPort() + inShift);
+                final ConnectionUIInformation uiInfo =
+                    getConnectionUIInfo(cc.getSource(), cc.getSourcePort(), c.getDest(), c.getDestPort());
+
+                if (uiInfo != null) {
+                    cc.setUIInfo(uiInfo);
+                }
             } else {
                 break;
             }
         }
 
         // set outgoing connections
-        for (ConnectionContainer c : m_outgoingConnections) {
-            if (m_wfm
-                .canAddConnection(newId, c.getSourcePort() + outShift, c.getDest(), c.getDestPort())) {
-                m_wfm.addConnection(newId, c.getSourcePort() + outShift, c.getDest(), c.getDestPort());
+        for (final ConnectionContainer c : m_outgoingConnections) {
+            if (m_wfm.canAddConnection(newId, c.getSourcePort() + outShift, c.getDest(), c.getDestPort())) {
+                final ConnectionContainer cc =
+                    m_wfm.addConnection(newId, c.getSourcePort() + outShift, c.getDest(), c.getDestPort());
+                final ConnectionUIInformation uiInfo =
+                    getConnectionUIInfo(c.getSource(), c.getSourcePort(), cc.getDest(), cc.getDestPort());
+
+                if (uiInfo != null) {
+                    cc.setUIInfo(uiInfo);
+                }
             } else {
                 break;
             }
         }
     }
-}
+
+    private ConnectionUIInformation getConnectionUIInfo(final NodeID sourceId, final int sourcePort,
+        final NodeID destinationId, final int destinationPort) {
+
+        if (m_connectionUIInfoMap != null) {
+            final DeleteCommand.ConnectionTerminiWrapper ctw =
+                new DeleteCommand.ConnectionTerminiWrapper(sourceId, sourcePort, destinationId, destinationPort);
+
+            return m_connectionUIInfoMap.get(ctw);
+        }
+
+        return null;
+    }
+ }
