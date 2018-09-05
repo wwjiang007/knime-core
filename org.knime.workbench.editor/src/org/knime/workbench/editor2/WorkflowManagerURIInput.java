@@ -40,75 +40,37 @@
  *  propagated with or for interoperation with KNIME.  The owner of a Node
  *  may freely choose the license terms applicable to such Node, including
  *  when such Node is propagated with or for interoperation with KNIME.
- * ---------------------------------------------------------------------
+ * -------------------------------------------------------------------
  *
- * Created: May 17, 2011
- * Author: ohl
+ * History
+ *   17.01.2008 (Fabian Dill): created
  */
-package org.knime.workbench.ui.navigator;
+package org.knime.workbench.editor2;
 
-import org.eclipse.ui.IEditorPart;
-import org.knime.core.node.workflow.WorkflowManager;
+import java.net.URI;
+
+import org.eclipse.ui.IURIEditorInput;
 import org.knime.core.ui.node.workflow.WorkflowManagerUI;
-import org.knime.core.ui.wrapper.WorkflowManagerWrapper;
-import org.knime.core.ui.wrapper.Wrapper;
 
 /**
- * Hackaround to avoid cyclic dependencies. The navigator needs to ask the
- * editor for its workflow manager. It does it through this adapter.
+ * Combination of {@link WorkflowManagerInput} and {@link IURIEditorInput} that provides the workflow location as an
+ * URI.
  *
- * @author ohl, University of Konstanz
+ * @author Martin Horn, KNIME GmbH, Konstanz, Germany
  */
-public class WorkflowEditorAdapter {
-    private final WorkflowManagerUI m_wfm;
-    private final IEditorPart m_parentEditor;
+public class WorkflowManagerURIInput extends WorkflowManagerInput implements IURIEditorInput {
 
     /**
-     * @deprecated use {@link #WorkflowEditorAdapter(WorkflowManagerUI, IEditorPart)} instead
-     * @param wfm
-     * @param parentEditor
+     * @param manager the workflow manager
+     * @param workflowLocation the URI of the workflow location
      */
-    @Deprecated
-    public WorkflowEditorAdapter(final WorkflowManager wfm, final IEditorPart parentEditor) {
-        m_wfm = WorkflowManagerWrapper.wrap(wfm);
-        m_parentEditor = parentEditor;
+    public WorkflowManagerURIInput(final WorkflowManagerUI manager, final URI workflowLocation) {
+        super(manager, workflowLocation);
     }
 
-    /**
-     * @param wfm the workflow manager to be returned at {@link #getWorkflowManagerUI()}
-     * @param parentEditor the parent editor to be returned at {@link #getParentEditor()}
-     */
-    public WorkflowEditorAdapter(final WorkflowManagerUI wfm, final IEditorPart parentEditor) {
-        m_wfm = wfm;
-        m_parentEditor = parentEditor;
+    @Override
+    public URI getURI() {
+        return getWorkflowLocation();
     }
 
-    /**
-     * Returns the workflow manager that is associated with the editor.
-     *
-     * @return a workflow manager or <code>null</code> if not of type {@link WorkflowManager}
-     * @deprecated use {@link #getWorkflowManagerUI()} instead
-     */
-    @Deprecated
-    public WorkflowManager getWorkflowManager() {
-        return Wrapper.unwrapWFMOptional(m_wfm).orElse(null);
-    }
-
-    /**
-     * Returns the workflow manager that is associated with the editor.
-     *
-     * @return a workflow manager
-     */
-    public WorkflowManagerUI getWorkflowManagerUI() {
-        return m_wfm;
-    }
-
-    /**
-     * Returns the parent editor in case this editor shows a meta-/subnode. Otherwise <code>null</code> if returned.
-     *
-     * @return the parent editor or <code>null</code>
-     */
-    public IEditorPart getParentEditor() {
-        return m_parentEditor;
-    }
 }

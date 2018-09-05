@@ -1,5 +1,6 @@
 /*
  * ------------------------------------------------------------------------
+ *
  *  Copyright by KNIME AG, Zurich, Switzerland
  *  Website: http://www.knime.com; Email: contact@knime.com
  *
@@ -42,73 +43,54 @@
  *  when such Node is propagated with or for interoperation with KNIME.
  * ---------------------------------------------------------------------
  *
- * Created: May 17, 2011
- * Author: ohl
  */
-package org.knime.workbench.ui.navigator;
+package org.knime.core.ui.node.workflow.async;
 
-import org.eclipse.ui.IEditorPart;
-import org.knime.core.node.workflow.WorkflowManager;
-import org.knime.core.ui.node.workflow.WorkflowManagerUI;
-import org.knime.core.ui.wrapper.WorkflowManagerWrapper;
-import org.knime.core.ui.wrapper.Wrapper;
+import java.util.concurrent.CompletableFuture;
+
+import org.knime.core.node.port.PortObject;
+import org.knime.core.node.port.PortObjectSpec;
+import org.knime.core.ui.node.workflow.NodeOutPortUI;
 
 /**
- * Hackaround to avoid cyclic dependencies. The navigator needs to ask the
- * editor for its workflow manager. It does it through this adapter.
+ * UI-interface that provides asynchronous versions of some methods of {@link NodeOutPortUI} - see also {@link AsyncUI}.
  *
- * @author ohl, University of Konstanz
+ * @author Martin Horn, KNIME GmbH, Konstanz, Germany
+ *
+ * @noimplement This interface is not intended to be implemented by clients.
+ * @noextend This interface is not intended to be extended by clients.
+ * @noreference This interface is not intended to be referenced by clients.
  */
-public class WorkflowEditorAdapter {
-    private final WorkflowManagerUI m_wfm;
-    private final IEditorPart m_parentEditor;
+public interface AsyncNodeOutPortUI extends NodeOutPortUI, AsyncUI {
 
     /**
-     * @deprecated use {@link #WorkflowEditorAdapter(WorkflowManagerUI, IEditorPart)} instead
-     * @param wfm
-     * @param parentEditor
+     * {@inheritDoc}
      */
-    @Deprecated
-    public WorkflowEditorAdapter(final WorkflowManager wfm, final IEditorPart parentEditor) {
-        m_wfm = WorkflowManagerWrapper.wrap(wfm);
-        m_parentEditor = parentEditor;
+    @Override
+    default PortObjectSpec getPortObjectSpec() {
+        throw new UnsupportedOperationException("Please use async method instead.");
     }
 
     /**
-     * @param wfm the workflow manager to be returned at {@link #getWorkflowManagerUI()}
-     * @param parentEditor the parent editor to be returned at {@link #getParentEditor()}
-     */
-    public WorkflowEditorAdapter(final WorkflowManagerUI wfm, final IEditorPart parentEditor) {
-        m_wfm = wfm;
-        m_parentEditor = parentEditor;
-    }
-
-    /**
-     * Returns the workflow manager that is associated with the editor.
+     * Async version of {@link #getPortObjectSpec()}.
      *
-     * @return a workflow manager or <code>null</code> if not of type {@link WorkflowManager}
-     * @deprecated use {@link #getWorkflowManagerUI()} instead
+     * @return result as future
      */
-    @Deprecated
-    public WorkflowManager getWorkflowManager() {
-        return Wrapper.unwrapWFMOptional(m_wfm).orElse(null);
+    CompletableFuture<PortObjectSpec> getPortObjectSpecAsync();
+
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    default PortObject getPortObject() {
+        throw new UnsupportedOperationException("Please use async method instead.");
     }
 
     /**
-     * Returns the workflow manager that is associated with the editor.
+     * Async version of {@link #getPortObject()}
      *
-     * @return a workflow manager
+     * @return result as future
      */
-    public WorkflowManagerUI getWorkflowManagerUI() {
-        return m_wfm;
-    }
-
-    /**
-     * Returns the parent editor in case this editor shows a meta-/subnode. Otherwise <code>null</code> if returned.
-     *
-     * @return the parent editor or <code>null</code>
-     */
-    public IEditorPart getParentEditor() {
-        return m_parentEditor;
-    }
+    CompletableFuture<PortObject> getPortObjectAsync();
 }

@@ -313,7 +313,7 @@ public class JavaSnippetCellFactory extends AbstractCellFactory {
                 }
 
                 if (thr.getMessage() != null) {
-                    msg.append(String.format("Exception message:", thr.getMessage()));
+                    msg.append(String.format("Exception message (%s): %s", thr.getClass().getSimpleName(), thr.getMessage()));
                 }
 
                 LOGGER.warn(msg.toString(), thr);
@@ -326,6 +326,10 @@ public class JavaSnippetCellFactory extends AbstractCellFactory {
                 final DataCell[] out = new DataCell[m_numOutFields];
                 // Return missing values for output fields
                 Arrays.fill(out, DataType.getMissingCell());
+
+                if(m_snippet.getWarningMessage() == null) {
+                   m_snippet.setWarningMessage("Exceptions in the code caused missing rows to be output.\nCheck log for details.");
+                }
 
                 m_rowIndex++;
                 return out;
@@ -422,12 +426,6 @@ public class JavaSnippetCellFactory extends AbstractCellFactory {
             cols[i] = new DataColumnSpecCreator(field.getKnimeName(), field.getDataType()).createSpec();
         }
         return cols;
-    }
-
-    @Deprecated
-    @Override
-    public void setProgress(final int curRowNr, final int rowCount, final RowKey lastKey, final ExecutionMonitor exec) {
-        exec.setProgress(curRowNr / (double)rowCount, () -> "Processed row " + curRowNr + " (\"" + lastKey + "\")");
     }
 
     @Override

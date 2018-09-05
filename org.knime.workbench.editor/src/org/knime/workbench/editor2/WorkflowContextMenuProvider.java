@@ -66,10 +66,10 @@ import org.eclipse.swt.events.MenuDetectEvent;
 import org.eclipse.swt.events.MenuDetectListener;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.ui.IWorkbenchActionConstants;
+import org.knime.core.node.BufferedDataTable;
 import org.knime.core.node.KNIMEConstants;
 import org.knime.core.node.workflow.LoopEndNode;
 import org.knime.core.node.workflow.NativeNodeContainer;
-import org.knime.core.node.workflow.NodeContainer;
 import org.knime.core.node.workflow.SingleNodeContainer;
 import org.knime.core.node.workflow.SubNodeContainer;
 import org.knime.core.node.workflow.WorkflowManager;
@@ -337,7 +337,7 @@ public class WorkflowContextMenuProvider extends ContextMenuProvider {
                     EditPart child = (EditPart)o;
                     if (child instanceof WorkflowInPortEditPart
                             && ((WorkflowInPortEditPart)child).isSelected()) {
-                        final WorkflowManager wm = Wrapper.unwrapWFM(((WorkflowPortBar)root.getModel()).getWorkflowManager());
+                        final WorkflowManagerUI wm = ((WorkflowPortBar)root.getModel()).getWorkflowManager();
                         action = new OpenWorkflowPortViewAction(wm,
                             ((WorkflowInPortEditPart)child).getIndex(), wm.getNrInPorts());
                         manager.appendToGroup("outPortViews", action);
@@ -458,10 +458,13 @@ public class WorkflowContextMenuProvider extends ContextMenuProvider {
                         // skip the implicit flow var ports on "normal" nodes
                         continue;
                     }
-                    if (wraps(container, NodeContainer.class)) {
-                        action = new OpenPortViewAction(unwrapNC(container), i, numOutPorts);
-                        manager.appendToGroup("outPortViews", action);
+                    if (!wraps(container, WorkflowManager.class)
+                        && !container.getOutPort(i).getPortType().equals(BufferedDataTable.TYPE)) {
+                        // only view on data tables are currently supported for WorkflowManagerUI and Co.
+                        continue;
                     }
+                    action = new OpenPortViewAction(container, i, numOutPorts);
+                    manager.appendToGroup("outPortViews", action);
                 }
 
             }

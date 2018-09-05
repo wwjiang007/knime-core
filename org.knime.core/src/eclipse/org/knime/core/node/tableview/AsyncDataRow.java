@@ -1,5 +1,6 @@
 /*
  * ------------------------------------------------------------------------
+ *
  *  Copyright by KNIME AG, Zurich, Switzerland
  *  Website: http://www.knime.com; Email: contact@knime.com
  *
@@ -42,73 +43,102 @@
  *  when such Node is propagated with or for interoperation with KNIME.
  * ---------------------------------------------------------------------
  *
- * Created: May 17, 2011
- * Author: ohl
+ * History
+ *   Aug 27, 2018 (hornm): created
  */
-package org.knime.workbench.ui.navigator;
+package org.knime.core.node.tableview;
 
-import org.eclipse.ui.IEditorPart;
-import org.knime.core.node.workflow.WorkflowManager;
-import org.knime.core.ui.node.workflow.WorkflowManagerUI;
-import org.knime.core.ui.wrapper.WorkflowManagerWrapper;
-import org.knime.core.ui.wrapper.Wrapper;
+import java.util.Iterator;
+import java.util.concurrent.CompletableFuture;
+
+import org.knime.core.data.DataCell;
+import org.knime.core.data.DataRow;
+import org.knime.core.data.RowKey;
 
 /**
- * Hackaround to avoid cyclic dependencies. The navigator needs to ask the
- * editor for its workflow manager. It does it through this adapter.
+ * A row that is not immediately available and requires some time to be loaded (e.g. from a remote endpoint). Class is
+ * intended for the UI only!
  *
- * @author ohl, University of Konstanz
+ * @noreference This class is not intended to be referenced by clients.
+ * @noinstantiate This class is not intended to be instantiated by clients.
+ *
+ * @author Martin Horn, KNIME GmbH, Konstanz, Germany
+ * @since 3.7
  */
-public class WorkflowEditorAdapter {
-    private final WorkflowManagerUI m_wfm;
-    private final IEditorPart m_parentEditor;
+public class AsyncDataRow implements DataRow {
+
+    private int m_numCells;
+    private CompletableFuture<DataRow> m_futureRow;
+    private long m_rowIndex;
 
     /**
-     * @deprecated use {@link #WorkflowEditorAdapter(WorkflowManagerUI, IEditorPart)} instead
-     * @param wfm
-     * @param parentEditor
-     */
-    @Deprecated
-    public WorkflowEditorAdapter(final WorkflowManager wfm, final IEditorPart parentEditor) {
-        m_wfm = WorkflowManagerWrapper.wrap(wfm);
-        m_parentEditor = parentEditor;
-    }
-
-    /**
-     * @param wfm the workflow manager to be returned at {@link #getWorkflowManagerUI()}
-     * @param parentEditor the parent editor to be returned at {@link #getParentEditor()}
-     */
-    public WorkflowEditorAdapter(final WorkflowManagerUI wfm, final IEditorPart parentEditor) {
-        m_wfm = wfm;
-        m_parentEditor = parentEditor;
-    }
-
-    /**
-     * Returns the workflow manager that is associated with the editor.
+     * Creates a new async data row.
      *
-     * @return a workflow manager or <code>null</code> if not of type {@link WorkflowManager}
-     * @deprecated use {@link #getWorkflowManagerUI()} instead
+     * @param rowIndex the row index of this row
+     * @param numCells the number of cells in the row
+     * @param futureRow the row still requires time for loading - will be used as soon as the loading is done
      */
-    @Deprecated
-    public WorkflowManager getWorkflowManager() {
-        return Wrapper.unwrapWFMOptional(m_wfm).orElse(null);
+    public AsyncDataRow(final long rowIndex, final int numCells, final CompletableFuture<DataRow> futureRow) {
+        m_rowIndex = rowIndex;
+        m_numCells = numCells;
+        m_futureRow = futureRow;
     }
 
     /**
-     * Returns the workflow manager that is associated with the editor.
-     *
-     * @return a workflow manager
+     * {@inheritDoc}
      */
-    public WorkflowManagerUI getWorkflowManagerUI() {
-        return m_wfm;
+    @Override
+    public Iterator<DataCell> iterator() {
+        throw new UnsupportedOperationException();
     }
 
     /**
-     * Returns the parent editor in case this editor shows a meta-/subnode. Otherwise <code>null</code> if returned.
-     *
-     * @return the parent editor or <code>null</code>
+     * {@inheritDoc}
      */
-    public IEditorPart getParentEditor() {
-        return m_parentEditor;
+    @Override
+    public int getNumCells() {
+        return m_numCells;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public RowKey getKey() {
+        if (m_futureRow.isCompletedExceptionally()) {
+            return new RowKey("FAILED LOADING");
+        } else if (m_futureRow.isDone()) {
+            return m_futureRow.getNow(null).getKey();
+        } else {
+            return new RowKey("Loading ... (" + m_rowIndex + ")");
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public DataCell getCell(final int index) {
+        if (m_futureRow.isDone() && !m_futureRow.isCompletedExceptionally()) {
+            return m_futureRow.getNow(null).getCell(index);
+        } else {
+            return new DataCell() {
+
+                @Override
+                public String toString() {
+                    return "";
+                }
+
+                @Override
+                public int hashCode() {
+                    return 0;
+                }
+
+                @Override
+                protected boolean equalsDataCell(final DataCell dc) {
+                    return false;
+                }
+            };
+        }
     }
 }
