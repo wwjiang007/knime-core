@@ -52,9 +52,12 @@ import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.Frame;
 import java.awt.Panel;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.MalformedURLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -70,8 +73,10 @@ import javax.swing.event.CaretListener;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
+import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.core.runtime.FileLocator;
+import org.eclipse.core.runtime.IConfigurationElement;
 import org.eclipse.core.runtime.Platform;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.layout.PixelConverter;
@@ -79,6 +84,9 @@ import org.eclipse.jface.window.Window;
 import org.eclipse.jface.wizard.WizardPage;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.awt.SWT_AWT;
+import org.eclipse.swt.browser.Browser;
+import org.eclipse.swt.browser.ProgressEvent;
+import org.eclipse.swt.browser.ProgressListener;
 import org.eclipse.swt.custom.ScrolledComposite;
 import org.eclipse.swt.events.DisposeEvent;
 import org.eclipse.swt.events.DisposeListener;
@@ -100,6 +108,7 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Spinner;
 import org.eclipse.swt.widgets.TabFolder;
 import org.eclipse.swt.widgets.TabItem;
@@ -155,6 +164,10 @@ public class SubnodeLayoutJSONEditorPage extends WizardPage {
 
     private NodeUsageComposite m_nodeUsageComposite;
 
+    private File m_tempDir;
+    private final static String EMPTY_JSON = "{ \"rows\" : [] }";
+    private Browser m_browser;
+
     /**
      * Crates a new page instance with a given page name
      * @param pageName the page name
@@ -165,7 +178,6 @@ public class SubnodeLayoutJSONEditorPage extends WizardPage {
         m_jsonDocument = "";
         m_basicMap = new LinkedHashMap<NodeIDSuffix, BasicLayoutInfo>();
         m_layoutCreator = new DefaultLayoutCreatorImpl();
-
     }
 
     /**
@@ -174,6 +186,10 @@ public class SubnodeLayoutJSONEditorPage extends WizardPage {
     @Override
     public void createControl(final Composite parent) {
         TabFolder tabs = new TabFolder(parent, SWT.BORDER);
+
+        TabItem visualTab = new TabItem(tabs, SWT.NONE);
+        visualTab.setText("Visual Layout");
+        visualTab.setControl(createVisualLayoutComposite(tabs));
 
         TabItem usageTab = new TabItem(tabs, SWT.NONE);
         usageTab.setText("Node Usage");
@@ -226,6 +242,170 @@ public class SubnodeLayoutJSONEditorPage extends WizardPage {
         return true;
     }
 
+    private Composite createVisualLayoutComposite(final Composite parent) {
+        final Composite composite = new Composite(parent, SWT.NONE);
+        composite.setLayout(new GridLayout(1, false));
+        composite.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+
+        // Create temporary directory if necessary
+        if (!tempDirExists()) {
+            File td = null;
+            try {
+                td = WebResourceUtil.createTempDirectory("knimeLayoutEditor");
+            } catch(final IOException ex) {
+                LOGGER.error("Cannot create temp directory: " + ex.getMessage(), ex);
+            }
+            m_tempDir = td;
+        }
+
+        // Copy files to temp location
+        final IConfigurationElement i = WebResourceUtil.getConfigurationFromID(WebResourceUtil.ID_WEB_RES,
+            WebResourceUtil.ATTR_RES_BUNDLE_ID, "knimeLayoutEditor_1.0.0");
+        final Map<File, String> files = WebResourceUtil.getWebResourceAndDependencies(i);
+        final Map<File, String> fixedLocations = changeLocations(files);
+        try {
+            WebResourceUtil.copyWebResourcesToTemp(m_tempDir, fixedLocations);
+        } catch (IOException ex) {
+            LOGGER.error("Cannot copy files to temp directory" + ex.getMessage(), ex);
+        }
+
+        // Create browser
+        m_browser = new Browser(composite, SWT.FILL);
+        try {
+            final String location = m_tempDir.getAbsolutePath() + "/layoutEditor/index.html";
+            m_browser.setUrl(new File(location).toURI().toURL().toString());
+        } catch (MalformedURLException e) {
+            LOGGER.error(e.getMessage(), e);
+        }
+        m_browser.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+
+        // Create buttons
+        final Composite buttonComposite = new Composite(composite, SWT.NONE);
+        buttonComposite.setLayout(new GridLayout(4, true));
+        buttonComposite.setLayoutData(new GridData(SWT.RIGHT, SWT.BOTTOM, true, false));
+
+        final GridData d = new GridData(SWT.RIGHT, SWT.BOTTOM, false, false);
+        d.widthHint = 110;
+
+        final Button resizeButton = new Button(buttonComposite, SWT.PUSH);
+        resizeButton.setText("Resize");
+        resizeButton.setLayoutData(d);
+        resizeButton.addSelectionListener(new SelectionAdapter() {
+
+            @Override
+            public void widgetSelected(final SelectionEvent e) {
+                final Shell s = Display.getCurrent().getActiveShell();
+                final boolean fullScreen = s.getFullScreen();
+                s.setFullScreen(!fullScreen);
+            }
+        });
+
+        final Button clearButton = new Button(buttonComposite, SWT.PUSH);
+        clearButton.setText("Clear");
+        clearButton.setLayoutData(d);
+        clearButton.addSelectionListener(new SelectionAdapter() {
+
+            @Override
+            public void widgetSelected(final SelectionEvent e) {
+                m_browser.evaluate("loadLayout(\'" + EMPTY_JSON +"\');");
+            }
+        });
+
+        final Button resetButton = new Button(buttonComposite, SWT.PUSH);
+        resetButton.setText("Reset");
+        resetButton.setLayoutData(d);
+        resetButton.addSelectionListener(new SelectionAdapter() {
+
+            @Override
+            public void widgetSelected(final SelectionEvent e) {
+                m_browser.evaluate("loadLayout(\'" + getJsonDocument() + "\');");
+            }
+        });
+
+        final Button applyButton = new Button(buttonComposite, SWT.PUSH);
+        applyButton.setText("Apply");
+        applyButton.setLayoutData(d);
+        applyButton.addSelectionListener(new SelectionAdapter() {
+
+            @Override
+            public void widgetSelected(final SelectionEvent e) {
+                final String layout = (String) m_browser.evaluate("return sendLayout();");
+                updateJsonDocument(layout);
+                updateJsonTextArea();
+                updateModelFromJson();
+            }
+        });
+
+        // Create JSON Objects
+        final JSONVisualLayoutEditorNodes nodes =
+            new JSONVisualLayoutEditorNodes(m_viewNodes, m_subNodeContainer, m_wfManager);
+        final ObjectMapper mapper = new ObjectMapper();
+        String JSONNodes = "";
+        try {
+            JSONNodes = mapper.writeValueAsString(nodes);
+        } catch (JsonProcessingException e) {
+            LOGGER.error("Cannot write JSON: " + e.getMessage(), e);
+        }
+        // variables in progress listener must be final
+        final String JSONLayout = getJsonDocument();
+        final String jsonNodes =
+            new StringBuilder(JSONNodes).insert(JSONNodes.length() - 2, ", length:" + nodes.getLength()).toString();
+        m_browser.addProgressListener(new ProgressListener() {
+
+            @Override
+            public void changed(final ProgressEvent event) {
+                // do nothing
+            }
+
+            @Override
+            public void completed(final ProgressEvent event) {
+                m_browser.evaluate("loadNodes(" + jsonNodes + ");");
+                m_browser.evaluate("loadLayout(\'" + JSONLayout + "\');");
+            } });
+        return composite;
+    }
+
+    private boolean tempDirExists() {
+        return m_tempDir != null && m_tempDir.exists() && m_tempDir.isDirectory();
+    }
+
+    private static Map<File, String> changeLocations(final Map<File, String> files) {
+        final Map<File, String> updateLocations = new HashMap<>();
+        for (File f : files.keySet()) {
+            setLocation(updateLocations, f);
+        }
+        return updateLocations;
+    }
+
+    private static void setLocation(final Map<File, String> files, final File f) {
+        if (f.isFile()) {
+            final String fileName = f.toPath().getFileName().toString();
+            final String base = "layoutEditor/";
+            switch (FilenameUtils.getExtension(fileName.toLowerCase())) {
+                case "css":
+                    files.put(f, base + "css/" + fileName);
+                    break;
+                case "map" :
+                    files.put(f, base + "css/" + fileName);
+                    break;
+                case "js":
+                    files.put(f, base + "js/" + fileName);
+                    break;
+                case "html":
+                    files.put(f, base + fileName);
+                    break;
+                default:
+                    files.put(f, base + "fonts/" + fileName);
+            }
+        }
+        else {
+            File[] subFiles = f.listFiles();
+            for(final File subFile : subFiles) {
+                setLocation(files, subFile);
+            }
+        }
+    }
+
     private Composite createBasicComposite(final Composite parent) {
         Composite composite = new Composite(parent, SWT.NONE);
         composite.setLayout(new GridLayout(1, true));
@@ -239,7 +419,6 @@ public class SubnodeLayoutJSONEditorPage extends WizardPage {
         scrollPane.setLayoutData(new GridData(SWT.CENTER, SWT.CENTER, true, true));
 
         fillBasicComposite();
-        scrollPane.setMinSize(m_basicComposite.computeSize(SWT.DEFAULT, SWT.DEFAULT));
         return composite;
     }
 
@@ -419,14 +598,13 @@ public class SubnodeLayoutJSONEditorPage extends WizardPage {
                     return;
                 }
                 resetLayout();
-                if (isWindows()) {
-                    m_textArea.setText(m_jsonDocument);
-                } else {
-                    m_text.setText(m_jsonDocument);
-                }
+                updateJsonTextArea();
                 updateModelFromJson();
             }
         });
+        // Ensure scroll bar appears when composite data changes
+        ((ScrolledComposite)m_basicComposite.getParent())
+            .setMinSize(m_basicComposite.computeSize(SWT.DEFAULT, SWT.DEFAULT, true));
     }
 
     private Composite createNodeLabelComposite(final Composite parent, final NodeID nodeID, final NodeContainer nodeContainer) {
@@ -624,35 +802,43 @@ public class SubnodeLayoutJSONEditorPage extends WizardPage {
      * @param subnodeContainer the wrapped metanode container
      * @param viewNodes a map of all available view nodes
      */
-    public void setNodes(final WorkflowManager manager, final SubNodeContainer subnodeContainer, @SuppressWarnings("rawtypes") final Map<NodeIDSuffix, WizardNode> viewNodes) {
+    public void setNodes(final WorkflowManager manager, final SubNodeContainer subnodeContainer,
+        @SuppressWarnings("rawtypes") final Map<NodeIDSuffix, WizardNode> viewNodes) {
         m_wfManager = manager;
         m_subNodeContainer = subnodeContainer;
         m_viewNodes = viewNodes;
-        JSONLayoutPage page = null;
         String layout = m_subNodeContainer.getLayoutJSONString();
-        if (StringUtils.isNotEmpty(layout)) {
-            try {
-                ObjectMapper mapper = JSONLayoutPage.getConfiguredObjectMapper();
-                page = mapper.readValue(layout, JSONLayoutPage.class);
-                if (page.getRows() == null) {
-                    page = null;
-                } else {
-                    m_jsonDocument = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(page);
-                }
-            } catch (IOException e) {
-                LOGGER.error("Error parsing layout. Pretty printing not possible: " + e.getMessage(), e);
-                m_jsonDocument = layout;
+        if (layout == null || layout.isEmpty() || layout.equals(EMPTY_JSON) || layout.equals("{}")
+            || layout.equals("{ }")) {
+            m_jsonDocument = EMPTY_JSON;
+            return;
+        }
+        JSONLayoutPage page = updateJsonDocument(layout);
+        List<JSONLayoutRow> rows = page.getRows();
+        if (rows != null) {
+            for (int rowIndex = 0; rowIndex < rows.size(); rowIndex++) {
+                JSONLayoutRow row = rows.get(rowIndex);
+                populateDocumentNodeIDs(row);
+                processBasicLayoutRow(row, rowIndex);
             }
         }
-        if (page == null) {
-            page = resetLayout();
+    }
+
+    private JSONLayoutPage updateJsonDocument(final String layout) {
+        JSONLayoutPage page = null;
+        try {
+            ObjectMapper mapper = JSONLayoutPage.getConfiguredObjectMapper();
+            page = mapper.readValue(layout, JSONLayoutPage.class);
+            if (page.getRows() == null) {
+                m_jsonDocument = EMPTY_JSON;
+            } else {
+                m_jsonDocument = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(page);
+            }
+        } catch (IOException e) {
+            LOGGER.error("Error parsing layout. Pretty printing not possible: " + e.getMessage(), e);
+            m_jsonDocument = layout;
         }
-        List<JSONLayoutRow> rows = page.getRows();
-        for (int rowIndex = 0; rowIndex < rows.size(); rowIndex++) {
-            JSONLayoutRow row = rows.get(rowIndex);
-            populateDocumentNodeIDs(row);
-            processBasicLayoutRow(row, rowIndex);
-        }
+        return page;
     }
 
     /**
@@ -707,6 +893,9 @@ public class SubnodeLayoutJSONEditorPage extends WizardPage {
         m_basicMap.clear();
         m_basicPanelAvailable = true;
         List<JSONLayoutRow> rows = page.getRows();
+        if (rows == null) {
+            return;
+        }
         for (int rowIndex = 0; rowIndex < rows.size(); rowIndex++) {
             JSONLayoutRow row = rows.get(rowIndex);
             populateDocumentNodeIDs(row);
@@ -772,6 +961,7 @@ public class SubnodeLayoutJSONEditorPage extends WizardPage {
     private void tryUpdateJsonFromBasic() {
         try {
             basicLayoutToJson();
+            updateVisualLayout();
         } catch (Exception e) {
             //TODO show error in dialog?, this should not happen
             LOGGER.error(e.getMessage(), e);
@@ -806,11 +996,7 @@ public class SubnodeLayoutJSONEditorPage extends WizardPage {
         ObjectMapper mapper = JSONLayoutPage.getConfiguredObjectMapper();
         String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(page);
         m_jsonDocument = json;
-        if (isWindows()) {
-            m_textArea.setText(m_jsonDocument);
-        } else {
-            m_text.setText(m_jsonDocument);
-        }
+        updateJsonTextArea();
     }
 
     private void compareNodeIDs() {
@@ -874,6 +1060,7 @@ public class SubnodeLayoutJSONEditorPage extends WizardPage {
     private void updateModelFromJson() {
         if (isJSONValid()) {
             updateBasicLayout();
+            updateVisualLayout();
         } else {
             m_basicPanelAvailable = false;
         }
@@ -882,6 +1069,10 @@ public class SubnodeLayoutJSONEditorPage extends WizardPage {
         }
         fillBasicComposite();
         m_basicComposite.layout(true);
+    }
+
+    private void updateVisualLayout() {
+        m_browser.evaluate("loadLayout(\'" + getJsonDocument() + "\');");
     }
 
     /**
@@ -943,20 +1134,31 @@ public class SubnodeLayoutJSONEditorPage extends WizardPage {
     public String getJsonDocument() {
         ObjectMapper mapper = JSONLayoutPage.getConfiguredObjectMapper();
         ObjectReader reader = mapper.readerForUpdating(new JSONLayoutPage());
-        try {
-            String json = isWindows() ? m_textArea.getText() : m_jsonDocument;
-            JSONLayoutPage page = reader.readValue(json);
-            String layoutString = mapper.writeValueAsString(page);
-            return layoutString;
-        } catch (IOException e) {
-            LOGGER.error("Failed to retrieve JSON string from layout:" + e.getMessage(), e);
+        String layoutString = "";
+        String json = isWindows() ? m_textArea.getText() : m_jsonDocument;
+        if (json != null && !json.isEmpty()) {
+            try {
+                JSONLayoutPage page = reader.readValue(json);
+                layoutString = mapper.writeValueAsString(page);
+            } catch (IOException e) {
+                LOGGER.error("Failed to retrieve JSON string from layout:" + e.getMessage(), e);
+                layoutString = "";
+            }
         }
 
-        return "";
+        return layoutString;
     }
 
     private boolean isWindows() {
         return Platform.OS_WIN32.equals(Platform.getOS());
+    }
+
+    private void updateJsonTextArea() {
+        if (isWindows()) {
+            m_textArea.setText(m_jsonDocument);
+        } else {
+            m_text.setText(m_jsonDocument);
+        }
     }
 
     private static class BasicLayoutInfo {
