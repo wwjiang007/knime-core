@@ -49,6 +49,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 
+import org.apache.commons.lang.StringUtils;
 import org.knime.base.node.util.BufferedFileReader;
 import org.knime.core.data.DataColumnSpecCreator;
 import org.knime.core.data.DataTableSpec;
@@ -81,73 +82,83 @@ final class LineReaderNodeModel extends NodeModel {
     @Override
     protected DataTableSpec[] configure(final DataTableSpec[] inSpecs)
             throws InvalidSettingsException {
-        return new DataTableSpec[] {createOutputSpec()};
+        return new DataTableSpec[] {createOutputSpec(null)};
     }
 
     /** {@inheritDoc} */
     @Override
     protected BufferedDataTable[] execute(final BufferedDataTable[] inData,
             final ExecutionContext exec) throws Exception {
-        DataTableSpec spec = createOutputSpec();
         URL url = m_config.getURL();
-        BufferedDataContainer container = exec.createDataContainer(spec);
-        BufferedFileReader fileReader = BufferedFileReader.createNewReader(url);
-        long fileSize = fileReader.getFileSize();
-        int currentRow = 0;
-        final int limitRows = m_config.getLimitRowCount();
-        final boolean isSkipEmpty = m_config.isSkipEmptyLines();
-        final boolean matchRegex = !"".equals(m_config.getRegex());
-        String line;
-        String rowPrefix = m_config.getRowPrefix();
-        try {
-            while ((line = fileReader.readLine()) != null) {
-                String progMessage = "Reading row " + (currentRow + 1);
-                if (fileSize > 0) {
-                    long numberOfBytesRead = fileReader.getNumberOfBytesRead();
-                    double prog = (double)numberOfBytesRead / fileSize;
-                    exec.setProgress(prog, progMessage);
-                } else {
-                    exec.setMessage(progMessage);
-                }
-                exec.checkCanceled();
-                if (isSkipEmpty && line.trim().length() == 0) {
-                    // do not increment currentRow
-                    continue;
-                }
-                if (matchRegex && !line.matches(m_config.getRegex())) {
-                    //do not increment currentRow
-                    continue;
-                }
-                if (limitRows > 0 && currentRow >= limitRows) {
-                    setWarningMessage("Read only " + limitRows
-                            + " row(s) due to user settings.");
-                    break;
-                }
-                RowKey key = new RowKey(rowPrefix + (currentRow++));
-                DefaultRow row = new DefaultRow(key, new StringCell(line));
-                container.addRowToTable(row);
-            }
-        } finally {
-            container.close();
+        BufferedDataContainer container;
+        try (BufferedFileReader fileReader = BufferedFileReader.createNewReader(url)) {
+            DataTableSpec spec = createOutputSpec(fileReader);
+            container = exec.createDataContainer(spec);
             try {
-                fileReader.close();
-            } catch (IOException ioe2) {
-                // ignore
+                long fileSize = fileReader.getFileSize();
+                int currentRow = 0;
+                final int limitRows = m_config.getLimitRowCount();
+                final boolean isSkipEmpty = m_config.isSkipEmptyLines();
+                final boolean matchRegex = !"".equals(m_config.getRegex());
+                String line;
+                String rowPrefix = m_config.getRowPrefix();
+                while ((line = fileReader.readLine()) != null) {
+                    String progMessage = "Reading row " + (currentRow + 1);
+                    if (fileSize > 0) {
+                        long numberOfBytesRead = fileReader.getNumberOfBytesRead();
+                        double prog = (double)numberOfBytesRead / fileSize;
+                        exec.setProgress(prog, progMessage);
+                    } else {
+                        exec.setMessage(progMessage);
+                    }
+                    exec.checkCanceled();
+                    if (isSkipEmpty && line.trim().length() == 0) {
+                        // do not increment currentRow
+                        continue;
+                    }
+                    if (matchRegex && !line.matches(m_config.getRegex())) {
+                        //do not increment currentRow
+                        continue;
+                    }
+                    if (limitRows > 0 && currentRow >= limitRows) {
+                        setWarningMessage("Read only " + limitRows + " row(s) due to user settings.");
+                        break;
+                    }
+                    RowKey key = new RowKey(rowPrefix + (currentRow++));
+                    DefaultRow row = new DefaultRow(key, new StringCell(line));
+                    container.addRowToTable(row);
+                }
+            } finally {
+                container.close();
             }
         }
         return new BufferedDataTable[] {container.getTable()};
     }
 
-    private DataTableSpec createOutputSpec() throws InvalidSettingsException {
+    private DataTableSpec createOutputSpec(final BufferedFileReader fileReader) throws InvalidSettingsException {
         CheckUtils.checkSettingNotNull(m_config, "No source location provided! Please enter a valid location.");
         final URL url = m_config.getURL();
         String warning = CheckUtils.checkSourceFile(url.toString());
         if (warning != null) {
             setWarningMessage(warning);
         }
-
-        String colName = m_config.getColumnHeader();
-        CheckUtils.checkNotNull(colName, "No output column name provided");
+        String colName;
+        if (m_config.isReadColumnHeader()) {
+            if (fileReader == null) { // during configure time
+                return null;
+            }
+            final boolean isSkipEmpty = m_config.isSkipEmptyLines();
+            try {
+                while ((colName = fileReader.readLine()) != null && isSkipEmpty && colName.trim().length() == 0) {
+                }
+            } catch (IOException e) {
+                throw new InvalidSettingsException(e);
+            }
+            // if top line in file is blank use a default non-empty string
+            colName = StringUtils.defaultIfBlank(colName, "<empty>");
+        } else {
+            colName = CheckUtils.checkNotNull(m_config.getColumnHeader(), "column header in config must not be null");
+        }
 
         DataColumnSpecCreator creator = new DataColumnSpecCreator(colName, StringCell.TYPE);
         String path = url.getPath();

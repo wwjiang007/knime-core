@@ -1,5 +1,6 @@
 /*
  * ------------------------------------------------------------------------
+ *
  *  Copyright by KNIME AG, Zurich, Switzerland
  *  Website: http://www.knime.com; Email: contact@knime.com
  *
@@ -41,86 +42,74 @@
  *  may freely choose the license terms applicable to such Node, including
  *  when such Node is propagated with or for interoperation with KNIME.
  * ---------------------------------------------------------------------
- * 
+ *
  * History
- *   Jun 20, 2007 (ohl): created
+ *   Sep 7, 2018 (loki): created
  */
-package org.knime.base.node.preproc.cellsplit;
+package org.knime.workbench.editor2.actions;
 
-import java.util.Vector;
-
-import org.knime.core.data.DataType;
-import org.knime.core.node.InvalidSettingsException;
-import org.knime.core.node.NodeSettingsRO;
+import org.eclipse.core.commands.ExecutionEvent;
+import org.eclipse.core.commands.ExecutionException;
+import org.eclipse.core.commands.IHandler;
+import org.eclipse.core.commands.IHandlerListener;
+import org.eclipse.gef.editparts.ZoomManager;
+import org.eclipse.jface.action.Action;
 
 /**
- * Extends the user settings object to a general splitter settings object. In
- * addition to the user settings it stores column types and number of columns,
- * the values analyzed during execute. These values are not saved.
- * 
- * @author ohl, University of Konstanz
+ * A simple action to reset the zoom level to 100%
+ *
+ * @author loki der quaeler
  */
-class CellSplitterSettings extends CellSplitterUserSettings {
+public class ZoomResetAction extends Action implements IHandler {
+    /** The commandId specified in the plugin.xml for the key-bound action. **/
+    public static final String KEY_COMMAND_ID = "knime.actions.zoom_reset";
 
-    private Vector<DataType> m_types = new Vector<DataType>();
+    private final ZoomManager m_zoomManager;
 
     /**
-     * Creates a new settings object with no (or default) settings.
+     * @param zm an instance of the zoom manager associated with the editor to which this action is registered
      */
-    CellSplitterSettings() {
-        super();
+    public ZoomResetAction(final ZoomManager zm) {
+        super("Reset Zoom");
+        m_zoomManager = zm;
+
+        setId(KEY_COMMAND_ID);
+        setActionDefinitionId(KEY_COMMAND_ID);
     }
 
     /**
-     * Creates a new settings object with the value from the specified settings
-     * object. If the values in there incomplete it throws an Exception. The
-     * values can be validated (checked for consistency and validity) with the
-     * getStatus method.
-     * 
-     * 
-     * @param values the config object to read the settings values from
-     * @throws InvalidSettingsException if the values in the settings object are
-     *             incomplete.
+     * {@inheritDoc}
      */
-    CellSplitterSettings(final NodeSettingsRO values)
-            throws InvalidSettingsException {
-        super(values);
+    @Override
+    public void run() {
+        m_zoomManager.setZoom(1.0);
     }
 
     /**
-     * Adds the type of a new column at the end of the column list.
-     * 
-     * @param type the type of the new column.
+     * {@inheritDoc}
      */
-    void addColumnOfType(final DataType type) {
-        m_types.add(type);
+    @Override
+    public void addHandlerListener(final IHandlerListener handlerListener) { }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void dispose() { }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public Object execute(final ExecutionEvent event) throws ExecutionException {
+        run();
+
+        return null;
     }
 
     /**
-     * Replaces the type of an already found column. Used during column type
-     * guessing.
-     * 
-     * @param colIdx the index of the column which gets a new type
-     * @param newType the new type of the specified column
+     * {@inheritDoc}
      */
-    void replaceTypeOfColumn(final int colIdx, final DataType newType) {
-        m_types.set(colIdx, newType);
-    }
-
-    /**
-     * Return the type of a column previously added. 
-     * 
-     * @param colIdx the column to get the type for.
-     * @return the guessed column type of the specified column. 
-     */
-    DataType getTypeOfColumn(final int colIdx) {
-        return m_types.get(colIdx);
-    }
-
-    /**
-     * @return the number of column found during type guessing
-     */
-    int getNumOfColsGuessed() {
-        return m_types.size();
-    }
+    @Override
+    public void removeHandlerListener(final IHandlerListener handlerListener) { }
 }

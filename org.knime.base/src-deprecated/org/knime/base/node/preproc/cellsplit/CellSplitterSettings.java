@@ -43,60 +43,86 @@
  * ---------------------------------------------------------------------
  * 
  * History
- *   Jun 19, 2007 (ohl): created
+ *   Jun 20, 2007 (ohl): created
  */
 package org.knime.base.node.preproc.cellsplit;
 
-import org.knime.core.node.NodeDialogPane;
-import org.knime.core.node.NodeFactory;
-import org.knime.core.node.NodeModel;
-import org.knime.core.node.NodeView;
+import java.util.Vector;
+
+import org.knime.core.data.DataType;
+import org.knime.core.node.InvalidSettingsException;
+import org.knime.core.node.NodeSettingsRO;
 
 /**
+ * Extends the user settings object to a general splitter settings object. In
+ * addition to the user settings it stores column types and number of columns,
+ * the values analyzed during execute. These values are not saved.
  * 
  * @author ohl, University of Konstanz
+ * @deprecated
  */
-public class CellSplitterNodeFactory extends NodeFactory {
+@Deprecated
+class CellSplitterSettings extends CellSplitterUserSettings {
+
+    private Vector<DataType> m_types = new Vector<DataType>();
 
     /**
-     * {@inheritDoc}
+     * Creates a new settings object with no (or default) settings.
      */
-    @Override
-    protected NodeDialogPane createNodeDialogPane() {
-        return new CellSplitterNodeDialogPane();
+    CellSplitterSettings() {
+        super();
     }
 
     /**
-     * {@inheritDoc}
+     * Creates a new settings object with the value from the specified settings
+     * object. If the values in there incomplete it throws an Exception. The
+     * values can be validated (checked for consistency and validity) with the
+     * getStatus method.
+     * 
+     * 
+     * @param values the config object to read the settings values from
+     * @throws InvalidSettingsException if the values in the settings object are
+     *             incomplete.
      */
-    @Override
-    public NodeModel createNodeModel() {
-        return new CellSplitterNodeModel();
+    CellSplitterSettings(final NodeSettingsRO values)
+            throws InvalidSettingsException {
+        super(values);
     }
 
     /**
-     * {@inheritDoc}
+     * Adds the type of a new column at the end of the column list.
+     * 
+     * @param type the type of the new column.
      */
-    @Override
-    public NodeView createNodeView(final int viewIndex,
-            final NodeModel nodeModel) {
-        return null;
+    void addColumnOfType(final DataType type) {
+        m_types.add(type);
     }
 
     /**
-     * {@inheritDoc}
+     * Replaces the type of an already found column. Used during column type
+     * guessing.
+     * 
+     * @param colIdx the index of the column which gets a new type
+     * @param newType the new type of the specified column
      */
-    @Override
-    protected int getNrNodeViews() {
-        return 0;
+    void replaceTypeOfColumn(final int colIdx, final DataType newType) {
+        m_types.set(colIdx, newType);
     }
 
     /**
-     * {@inheritDoc}
+     * Return the type of a column previously added. 
+     * 
+     * @param colIdx the column to get the type for.
+     * @return the guessed column type of the specified column. 
      */
-    @Override
-    protected boolean hasDialog() {
-        return true;
+    DataType getTypeOfColumn(final int colIdx) {
+        return m_types.get(colIdx);
     }
 
+    /**
+     * @return the number of column found during type guessing
+     */
+    int getNumOfColsGuessed() {
+        return m_types.size();
+    }
 }

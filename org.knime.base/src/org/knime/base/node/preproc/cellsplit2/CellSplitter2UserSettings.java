@@ -46,21 +46,26 @@
  *   Jun 19, 2007 (ohl): created
  *   Oct 06, 2008 (ohl): added missing value/empty cell option
  */
-package org.knime.base.node.preproc.cellsplit;
+package org.knime.base.node.preproc.cellsplit2;
 
+import org.apache.commons.lang.StringEscapeUtils;
 import org.knime.core.data.DataTableSpec;
 import org.knime.core.data.StringValue;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
+import org.knime.core.util.tokenizer.TokenizerSettings;
 
 /**
- * Holds all user settings needed for the cell splitter. Provides methods for
- * saving and a constructor taking a NodeSettingRO object.
+ * Holds all user settings needed for the cell splitter. Provides methods for saving and a constructor taking a
+ * NodeSettingRO object.
+ * <p>
+ * Note: This class replaces the (deprecated) CellSplitterUserSettings.
+ * </p>
  *
  * @author ohl, University of Konstanz
  */
-public class CellSplitterUserSettings {
+class CellSplitter2UserSettings {
 
     /**
      * keys to store user settings with.
@@ -80,14 +85,22 @@ public class CellSplitterUserSettings {
     private static final String CFG_USEEMPTYSTRING = "useEmptyString";
 
     private static final String CFG_USEESCAPECHAR = "useEscapeCharacter";
-    
+
     private static final String CFG_OUTPUTASLIST = "outputAsList";
-    
+
     private static final String CFG_OUTPUTASSET = "outputAsSet";
-    
+
     private static final String CFG_OUTPUTASCOLS = "outputAsColumns";
-    
+
     private static final String CFG_TRIM = "removeWhitespaces";
+
+    private static final String CFG_SPLIT_COLUMN_NAMES = "splitColumnNames";
+
+    private static final String CFG_HAS_SCAN_LIMIT = "hasScanLimit";
+
+    private static final String CFG_SCAN_LIMIT = "scanLimit";
+
+    private static final String CFG_REMOVE_INPUT_COL = "removeInputColumn";
 
     private String m_columnName = null;
 
@@ -104,47 +117,40 @@ public class CellSplitterUserSettings {
     private boolean m_useEmptyStrings = false;
 
     private boolean m_useEscapeCharacter = false;
-    
-    /**
-     * @since 2.6
-     */
+
     private boolean m_outputAsList = false;
 
-    /**
-     * @since 2.6
-     */
     private boolean m_outputAsSet = false;
-    
-    /**
-     * @since 2.6
-     */    
+
     private boolean m_outputAsCols = true;
 
-    /**
-     * @since 2.6
-     */    
     private boolean m_trim = true;
-    
+
+    private boolean m_splitColumnNames = false;
+
+    private boolean m_hasScanLimit = false;
+
+    private int m_scanLimit = 50;
+
+    private boolean m_removeInputColumn = false;
+
     /**
      * Creates a new settings object with no (or default) settings.
      */
-    CellSplitterUserSettings() {
+    CellSplitter2UserSettings() {
         /* empty */
     }
 
     /**
-     * Creates a new settings object with the value from the specified settings
-     * object. If the values in there are incomplete it throws an Exception. The
-     * values can be validated (checked for consistency and validity) with the
+     * Creates a new settings object with the value from the specified settings object. If the values in there are
+     * incomplete it throws an Exception. The values can be validated (checked for consistency and validity) with the
      * getStatus method.
      *
      *
      * @param settings the config object to read the settings values from
-     * @throws InvalidSettingsException if the values in the settings object are
-     *             incomplete.
+     * @throws InvalidSettingsException if the values in the settings object are incomplete.
      */
-    CellSplitterUserSettings(final NodeSettingsRO settings)
-            throws InvalidSettingsException {
+    CellSplitter2UserSettings(final NodeSettingsRO settings) throws InvalidSettingsException {
         m_columnName = settings.getString(CFG_COLNAME);
         m_delimiter = settings.getString(CFG_DELIMITER);
         m_guessNumOfCols = settings.getBoolean(CFG_GUESSCOLS);
@@ -156,14 +162,19 @@ public class CellSplitterUserSettings {
         // the node used to create empty cells instead of missing cells.
         m_useEmptyStrings = settings.getBoolean(CFG_USEEMPTYSTRING, true);
 
-        /** @since 2.6 */
         m_useEscapeCharacter = settings.getBoolean(CFG_USEESCAPECHAR, false);
 
-        /** @since 2.6 */
         m_outputAsList = settings.getBoolean(CFG_OUTPUTASLIST, false);
         m_outputAsSet = settings.getBoolean(CFG_OUTPUTASSET, false);
         m_outputAsCols = settings.getBoolean(CFG_OUTPUTASCOLS, true);
         m_trim = settings.getBoolean(CFG_TRIM, true);
+
+        m_splitColumnNames = settings.getBoolean(CFG_SPLIT_COLUMN_NAMES, false);
+
+        m_hasScanLimit = settings.getBoolean(CFG_HAS_SCAN_LIMIT, false);
+        m_scanLimit = settings.getInt(CFG_SCAN_LIMIT, 50);
+
+        m_removeInputColumn = settings.getBoolean(CFG_REMOVE_INPUT_COL, false);
     }
 
     /**
@@ -184,12 +195,18 @@ public class CellSplitterUserSettings {
         settings.addBoolean(CFG_OUTPUTASSET, m_outputAsSet);
         settings.addBoolean(CFG_OUTPUTASCOLS, m_outputAsCols);
         settings.addBoolean(CFG_TRIM, m_trim);
+
+        settings.addBoolean(CFG_SPLIT_COLUMN_NAMES, m_splitColumnNames);
+
+        settings.addBoolean(CFG_HAS_SCAN_LIMIT, m_hasScanLimit);
+        settings.addInt(CFG_SCAN_LIMIT, m_scanLimit);
+
+        settings.addBoolean(CFG_REMOVE_INPUT_COL, m_removeInputColumn);
     }
 
     /**
      * @param spec the spec to check the settings against. Can be null.
-     * @return null, if the settings are okay, or an user error message if some
-     *         settings are missing or invalid.
+     * @return null, if the settings are okay, or an user error message if some settings are missing or invalid.
      */
     String getStatus(final DataTableSpec spec) {
 
@@ -201,8 +218,7 @@ public class CellSplitterUserSettings {
             if (!spec.containsName(m_columnName)) {
                 return "Input table doesn't contain specified column name.";
             }
-            if (!spec.getColumnSpec(m_columnName).getType().isCompatible(
-                    StringValue.class)) {
+            if (!spec.getColumnSpec(m_columnName).getType().isCompatible(StringValue.class)) {
                 return "Selected split column must be of type string";
             }
         }
@@ -219,10 +235,8 @@ public class CellSplitterUserSettings {
         }
 
         if ((m_quotePattern != null)
-                && (m_quotePattern.startsWith(m_delimiter) || m_delimiter
-                        .startsWith(m_quotePattern))) {
-            return "The quote and delimiter can't be the same and can't"
-                    + " prefix each other.";
+            && (m_quotePattern.startsWith(m_delimiter) || m_delimiter.startsWith(m_quotePattern))) {
+            return "The quote and delimiter can't be the same and can't" + " prefix each other.";
         }
 
         return null;
@@ -313,21 +327,18 @@ public class CellSplitterUserSettings {
     }
 
     /**
-     * @return true, if an empty string cell is introduced instead of a missing
-     *         cell (in case of in missing input cell, or missing split
-     *         results).
+     * @return true, if an empty string cell is introduced instead of a missing cell (in case of in missing input cell,
+     *         or missing split results).
      */
     boolean isUseEmptyString() {
         return m_useEmptyStrings;
     }
 
     /**
-     * If set to true, the node creates an empty cell in case of a missing input
-     * cell or a missing split. Otherwise, if set false, it introduces a missing
-     * cell instead.
+     * If set to true, the node creates an empty cell in case of a missing input cell or a missing split. Otherwise, if
+     * set false, it introduces a missing cell instead.
      *
-     * @param useEmptyString set to true to create empty string cells instead of
-     *            missing cells.
+     * @param useEmptyString set to true to create empty string cells instead of missing cells.
      */
     void setUseEmptyString(final boolean useEmptyString) {
         m_useEmptyStrings = useEmptyString;
@@ -348,9 +359,7 @@ public class CellSplitterUserSettings {
     }
 
     /**
-     * @return the outputAsList <code>true</code> if output is list, otherwise
-     * <code>false</code>.
-     * @since 2.6
+     * @return the outputAsList <code>true</code> if output is list, otherwise <code>false</code>.
      */
     boolean isOutputAsList() {
         return m_outputAsList;
@@ -358,16 +367,13 @@ public class CellSplitterUserSettings {
 
     /**
      * @param outputAsList the outputAsList to set
-     * @since 2.6
      */
     void setOutputAsList(final boolean outputAsList) {
         m_outputAsList = outputAsList;
     }
 
     /**
-     * @return the outputAsSet <code>true</code> if output is set, otherwise
-     * <code>false</code>.
-     * @since 2.6
+     * @return the outputAsSet <code>true</code> if output is set, otherwise <code>false</code>.
      */
     boolean isOutputAsSet() {
         return m_outputAsSet;
@@ -375,16 +381,13 @@ public class CellSplitterUserSettings {
 
     /**
      * @param outputAsSet the outputAsSet to set
-     * @since 2.6
      */
     void setOutputAsSet(final boolean outputAsSet) {
         m_outputAsSet = outputAsSet;
     }
 
     /**
-     * @return the outputAsCols <code>true</code> if output are columns, 
-     * otherwise <code>false</code>.
-     * @since 2.6
+     * @return the outputAsCols <code>true</code> if output are columns, otherwise <code>false</code>.
      */
     boolean isOutputAsCols() {
         return m_outputAsCols;
@@ -392,16 +395,14 @@ public class CellSplitterUserSettings {
 
     /**
      * @param outputAsCols the outputAsCols to set
-     * @since 2.6
      */
     void setOutputAsCols(final boolean outputAsCols) {
         m_outputAsCols = outputAsCols;
     }
 
     /**
-     * @return the trim <code>true</code> if leading and trailing white spaces 
-     * need to be removed, otherwise <code>false</code>.
-     * @since 2.6
+     * @return the trim <code>true</code> if leading and trailing white spaces need to be removed, otherwise
+     *         <code>false</code>.
      */
     boolean isTrim() {
         return m_trim;
@@ -409,9 +410,95 @@ public class CellSplitterUserSettings {
 
     /**
      * @param trim the trim to set
-     * @since 2.6
      */
     void setTrim(final boolean trim) {
         m_trim = trim;
+    }
+
+    /**
+     * @return <code>true</code> if the input column name should be split with the same pattern as the columns contents
+     *         and be used as column names.
+     */
+    boolean isSplitColumnNames() {
+        return m_splitColumnNames;
+    }
+
+    /**
+     * Set whether to split the input column's name for use as output column names.
+     *
+     * @param split Whether to split
+     */
+    void setSplitColumnNames(final boolean split) {
+        m_splitColumnNames = split;
+    }
+
+    /**
+     * @return whether to use a scan limit while guessing the amount of output columns
+     */
+    boolean hasScanLimit() {
+        return m_hasScanLimit;
+    }
+
+    /**
+     * @param b whether to use a scan limit while guessing the amount of output columns
+     */
+    void setHasScanLimit(final boolean b) {
+        m_hasScanLimit = b;
+    }
+
+    /**
+     * @return the number of rows to scan to guess the number of output columns
+     */
+    int scanLimit() {
+        return m_scanLimit;
+    }
+
+    /**
+     * @param n Amount of numbers to use when guessing amount of output columns. Only has effect if
+     *            {@link #hasScanLimit()}.
+     */
+    void setScanLimit(final int n) {
+        m_scanLimit = n;
+    }
+
+    /**
+     * @return whether to remove the input column
+     */
+    boolean isRemoveInputColumn() {
+        return m_removeInputColumn;
+    }
+
+    /**
+     * @param b Whether to remove the input column
+     */
+    void setRemoveInputColumn(final boolean b) {
+        m_removeInputColumn = b;
+    }
+
+    /**
+     * Creates the TokenizerSettings from these CellSpliterUserSettings, which can be <code>null</code>.
+     *
+     * @return the tokenizer settings.
+     */
+    TokenizerSettings createTokenizerSettings() {
+        if ((getDelimiter() == null) || (getDelimiter().length() == 0)) {
+            return null;
+        }
+
+        final TokenizerSettings result = new TokenizerSettings();
+
+        String delim = getDelimiter();
+        if (isUseEscapeCharacter()) {
+            delim = StringEscapeUtils.unescapeJava(delim);
+        }
+        result.addDelimiterPattern(delim, /* combineConsecutive */false, /* returnAsSeperateToken */false,
+            /* includeInToken */false);
+
+        final String quote = getQuotePattern();
+        if ((quote != null) && (quote.length() > 0)) {
+            result.addQuotePattern(quote, quote, '\\', isRemoveQuotes());
+        }
+
+        return result;
     }
 }

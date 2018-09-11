@@ -45,10 +45,9 @@
  * History
  *   Jun 19, 2007 (ohl): created
  */
-package org.knime.base.node.preproc.cellsplit;
+package org.knime.base.node.preproc.cellsplit2;
 
 import java.awt.Dimension;
-import java.awt.event.ItemEvent;
 import java.awt.event.ItemListener;
 import java.text.ParseException;
 
@@ -77,13 +76,16 @@ import org.knime.core.node.NotConfigurableException;
 import org.knime.core.node.util.ColumnSelectionComboxBox;
 
 /**
+ * The cell splitter node dialog pane.
+ * <p>
+ * Note: This class replaces the (deprecated) CellSplitterNodeDialogPane.
+ * </p>
  *
  * @author ohl, University of Konstanz
  */
-public class CellSplitterNodeDialogPane extends NodeDialogPane {
+final class CellSplitter2NodeDialogPane extends NodeDialogPane {
     @SuppressWarnings("unchecked")
-    private final ColumnSelectionComboxBox m_column =
-            new ColumnSelectionComboxBox((Border)null, StringValue.class);
+    private final ColumnSelectionComboxBox m_column = new ColumnSelectionComboxBox((Border)null, StringValue.class);
 
     private final JTextField m_delimiter = new JTextField();
 
@@ -91,48 +93,36 @@ public class CellSplitterNodeDialogPane extends NodeDialogPane {
 
     private final JSpinner m_columnNumber = new JSpinner();
 
-    /**
-     * @since 2.6
-     */
-    private final JRadioButton m_outputAsList = new JRadioButton(
-            "as list");
+    private final JRadioButton m_outputAsList = new JRadioButton("As list");
 
-    /**
-     * @since 2.6
-     */
-    private final JRadioButton m_outputAsSet = new JRadioButton(
-            "as set (remove duplicates)");
+    private final JRadioButton m_outputAsSet = new JRadioButton("As set (remove duplicates)");
 
-    /**
-     * @since 2.6
-     */
-    private final JRadioButton m_outputAsColumns = new JRadioButton(
-            "as new columns");
+    private final JRadioButton m_outputAsColumns = new JRadioButton("As new columns");
 
-    /**
-     * @since 2.6
-     */
-    private final JCheckBox m_trim = new JCheckBox(
-            "remove leading and trailing white space chars (trim)");
+    private final JCheckBox m_trim = new JCheckBox("Remove leading and trailing white space chars (trim)");
 
-    private final JRadioButton m_fixedSize = new JRadioButton("set array size");
+    private final JRadioButton m_fixedSize = new JRadioButton("Set array size");
 
     private final JRadioButton m_guessSize =
-            new JRadioButton(
-                    "guess size and column types (requires additional "
-                            + "data table scan)");
+        new JRadioButton("Guess size and column types (requires additional " + "data table scan)");
 
     private final JCheckBox m_useEmptyString =
-            new JCheckBox("Create empty string cells "
-                    + "instead of missing string cells");
+        new JCheckBox("Create empty string cells " + "instead of missing string cells");
 
-    private final JCheckBox m_useEscapeCharacter =
-            new JCheckBox("Use \\ as escape character");
+    private final JCheckBox m_useEscapeCharacter = new JCheckBox("Use \\ as escape character");
+
+    private final JCheckBox m_hasScanLimit = new JCheckBox("Scan limit (number of lines to guess on) ");
+
+    private final JSpinner m_scanLimit = new JSpinner(new SpinnerNumberModel(25, 1, Integer.MAX_VALUE, 50));
+
+    private final JCheckBox m_splitColumnNames = new JCheckBox("Split input column name for output column names");
+
+    private final JCheckBox m_removeInputColumn = new JCheckBox("Remove input column");
 
     /**
      * Creates a new panel for the dialog and inits all components.
      */
-    public CellSplitterNodeDialogPane() {
+    CellSplitter2NodeDialogPane() {
         JPanel pane = new JPanel();
         pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
 
@@ -141,18 +131,18 @@ public class CellSplitterNodeDialogPane extends NodeDialogPane {
         m_column.setMinimumSize(new Dimension(17, 25));
         m_column.setPreferredSize(new Dimension(200, 25));
         Box colSelBox = Box.createHorizontalBox();
-        colSelBox.setBorder(BorderFactory.createTitledBorder(BorderFactory
-                .createEtchedBorder(), "Column to split"));
+        colSelBox.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "Column to split"));
         colSelBox.add(Box.createHorizontalGlue());
         colSelBox.add(new JLabel("Select a column:"));
         colSelBox.add(Box.createHorizontalStrut(3));
         colSelBox.add(m_column);
         colSelBox.add(Box.createHorizontalGlue());
+        colSelBox.add(m_removeInputColumn);
+        colSelBox.add(Box.createHorizontalGlue());
 
         // settings panel
         Box settingsBox = Box.createVerticalBox();
-        settingsBox.setBorder(BorderFactory.createTitledBorder(BorderFactory
-                .createEtchedBorder(), "Settings"));
+        settingsBox.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "Settings"));
         // - the delimiter
         Box delimBox = Box.createHorizontalBox();
         delimBox.add(new JLabel("Enter a delimiter:"));
@@ -168,7 +158,7 @@ public class CellSplitterNodeDialogPane extends NodeDialogPane {
         settingsBox.add(delimBox);
 
         // - the quotes
-        Box quoteBox = Box.createHorizontalBox();
+        final Box quoteBox = Box.createHorizontalBox();
         quoteBox.add(new JLabel("Enter a quotation character:"));
         quoteBox.add(Box.createHorizontalStrut(3));
         quoteBox.add(m_quote);
@@ -182,15 +172,14 @@ public class CellSplitterNodeDialogPane extends NodeDialogPane {
         settingsBox.add(quoteBox);
 
         // - the trim checkbox
-        Box trimBox = Box.createHorizontalBox();
+        final Box trimBox = Box.createHorizontalBox();
         trimBox.add(m_trim);
         trimBox.add(Box.createHorizontalGlue());
         settingsBox.add(trimBox);
 
         // output box
-        Box outputBox = Box.createVerticalBox();
-        outputBox.setBorder(BorderFactory.createTitledBorder(BorderFactory
-                .createEtchedBorder(), "Output"));
+        final Box outputBox = Box.createVerticalBox();
+        outputBox.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "Output"));
 
         // - the output group (as list, as set, as columns)
         ButtonGroup obg = new ButtonGroup();
@@ -198,15 +187,17 @@ public class CellSplitterNodeDialogPane extends NodeDialogPane {
         obg.add(m_outputAsSet);
         obg.add(m_outputAsColumns);
         m_outputAsColumns.setSelected(true);
-        m_outputAsColumns.addItemListener(new ItemListener() {
-            @Override
-            public void itemStateChanged(final ItemEvent e) {
-                m_fixedSize.setEnabled(m_outputAsColumns.isSelected());
-                m_guessSize.setEnabled(m_outputAsColumns.isSelected());
-                m_columnNumber.setEnabled(m_outputAsColumns.isSelected());
-            }
+        m_outputAsColumns.addItemListener(e -> {
+            m_fixedSize.setEnabled(m_outputAsColumns.isSelected());
+            m_guessSize.setEnabled(m_outputAsColumns.isSelected());
+            m_columnNumber.setEnabled(m_outputAsColumns.isSelected() && m_fixedSize.isSelected());
+            m_splitColumnNames.setEnabled(m_outputAsColumns.isSelected());
+
+            final boolean enableScanLimit = m_outputAsColumns.isSelected() && m_guessSize.isSelected();
+            m_hasScanLimit.setEnabled(enableScanLimit);
+            m_scanLimit.setEnabled(enableScanLimit && m_hasScanLimit.isSelected());
         });
-        Box outputColBox = Box.createHorizontalBox();
+        final Box outputColBox = Box.createHorizontalBox();
         outputColBox.add(Box.createVerticalStrut(10));
         outputColBox.add(m_outputAsList);
         outputColBox.add(Box.createHorizontalStrut(5));
@@ -215,53 +206,73 @@ public class CellSplitterNodeDialogPane extends NodeDialogPane {
         outputColBox.add(m_outputAsColumns);
         outputColBox.add(Box.createHorizontalGlue());
         outputBox.add(outputColBox);
-        outputBox.add(Box.createVerticalGlue());
+
+        // - the split column names checkbox
+        final Box splitBox = Box.createHorizontalBox();
+        splitBox.add(m_splitColumnNames);
+        splitBox.add(Box.createHorizontalGlue());
+        outputBox.add(splitBox);
 
         // - the size group
-        ButtonGroup bg = new ButtonGroup();
+        final ButtonGroup bg = new ButtonGroup();
         bg.add(m_fixedSize);
         bg.add(m_guessSize);
         m_fixedSize.setSelected(true);
         m_columnNumber.setEnabled(true);
-        m_fixedSize.addItemListener(new ItemListener() {
-            @Override
-            public void itemStateChanged(final ItemEvent e) {
-                m_columnNumber.setEnabled(m_fixedSize.isSelected());
-            }
-        });
+        final ItemListener listener = e -> {
+            m_columnNumber.setEnabled(m_fixedSize.isSelected());
+
+            final boolean enableScanLimit = m_outputAsColumns.isSelected() && m_guessSize.isSelected();
+            m_hasScanLimit.setEnabled(enableScanLimit);
+            m_scanLimit.setEnabled(enableScanLimit && m_hasScanLimit.isSelected());
+        };
+        m_fixedSize.addItemListener(listener);
+        m_guessSize.addItemListener(listener);
+
         // the size spinner
-        m_columnNumber.setModel(new SpinnerNumberModel(1000, 1,
-                Integer.MAX_VALUE, 1));
+        m_columnNumber.setModel(new SpinnerNumberModel(1000, 1, Integer.MAX_VALUE, 1));
         m_columnNumber.setMaximumSize(new Dimension(200, 25));
         m_columnNumber.setMinimumSize(new Dimension(50, 25));
         m_columnNumber.setPreferredSize(new Dimension(100, 25));
-        JSpinner.DefaultEditor editor =
-                (JSpinner.DefaultEditor)m_columnNumber.getEditor();
+
+        final JSpinner.DefaultEditor editor = (JSpinner.DefaultEditor)m_columnNumber.getEditor();
         editor.getTextField().setColumns(4);
         editor.getTextField().setFocusLostBehavior(JFormattedTextField.COMMIT);
-        Box sizeBox = Box.createVerticalBox();
-        Box fixSizeBox = Box.createHorizontalBox();
+
+        final Box fixSizeBox = Box.createHorizontalBox();
         fixSizeBox.add(m_fixedSize);
         fixSizeBox.add(Box.createHorizontalStrut(5));
         fixSizeBox.add(m_columnNumber);
         fixSizeBox.add(Box.createHorizontalGlue());
-        Box guessSizeBox = Box.createHorizontalBox();
+
+        final Box guessSizeBox = Box.createHorizontalBox();
         guessSizeBox.add(m_guessSize);
         guessSizeBox.add(Box.createHorizontalGlue());
+
+        final Box scanLimitBox = Box.createHorizontalBox();
+        scanLimitBox.add(m_hasScanLimit);
+        scanLimitBox.add(m_scanLimit);
+        m_scanLimit.setEnabled(m_hasScanLimit.isSelected());
+        m_hasScanLimit.addItemListener(e -> {
+            m_scanLimit.setEnabled(m_hasScanLimit.isSelected());
+        });
+
+        final Box sizeBox = Box.createVerticalBox();
         sizeBox.add(fixSizeBox);
         sizeBox.add(Box.createVerticalStrut(3));
         sizeBox.add(guessSizeBox);
+        sizeBox.add(scanLimitBox);
 
         outputBox.add(Box.createVerticalStrut(7));
         outputBox.add(sizeBox);
         outputBox.add(Box.createVerticalGlue());
 
         // the missing value handling box
-        m_useEmptyString.setToolTipText("If checked, empty string cells are "
-                + "created for missing or short input cells");
-        Box missValBox = Box.createHorizontalBox();
-        missValBox.setBorder(BorderFactory.createTitledBorder(BorderFactory
-                .createEtchedBorder(), "Missing Value Handling"));
+        m_useEmptyString
+            .setToolTipText("If checked, empty string cells are " + "created for missing or short input cells");
+        final Box missValBox = Box.createHorizontalBox();
+        missValBox
+            .setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "Missing Value Handling"));
         missValBox.add(m_useEmptyString);
         missValBox.add(Box.createHorizontalGlue());
 
@@ -280,19 +291,18 @@ public class CellSplitterNodeDialogPane extends NodeDialogPane {
      * {@inheritDoc}
      */
     @Override
-    protected void loadSettingsFrom(final NodeSettingsRO settings,
-            final DataTableSpec[] specs) throws NotConfigurableException {
+    protected void loadSettingsFrom(final NodeSettingsRO settings, final DataTableSpec[] specs)
+        throws NotConfigurableException {
         if ((specs == null) || (specs.length == 0) || (specs[0] == null)) {
-            throw new NotConfigurableException(
-                    "Node can't be configured without input table spec");
+            throw new NotConfigurableException("Node can't be configured without input table spec");
         }
 
-        CellSplitterUserSettings csSettings;
+        CellSplitter2UserSettings csSettings;
         try {
-            csSettings = new CellSplitterUserSettings(settings);
+            csSettings = new CellSplitter2UserSettings(settings);
         } catch (InvalidSettingsException ise) {
             // if settings are invalid, create default settings
-            csSettings = new CellSplitterUserSettings();
+            csSettings = new CellSplitter2UserSettings();
             csSettings.setDelimiter(",");
             csSettings.setGuessNumOfCols(true);
             csSettings.setNumOfCols(6);
@@ -327,8 +337,7 @@ public class CellSplitterNodeDialogPane extends NodeDialogPane {
             m_quote.setText("");
         }
         if (csSettings.getNumOfCols() > 0) {
-            ((SpinnerNumberModel)m_columnNumber.getModel()).setValue(csSettings
-                    .getNumOfCols());
+            ((SpinnerNumberModel)m_columnNumber.getModel()).setValue(csSettings.getNumOfCols());
         } else {
             ((SpinnerNumberModel)m_columnNumber.getModel()).setValue(6);
         }
@@ -349,26 +358,27 @@ public class CellSplitterNodeDialogPane extends NodeDialogPane {
         }
 
         m_trim.setSelected(csSettings.isTrim());
+
+        m_splitColumnNames.setSelected(csSettings.isSplitColumnNames());
+
+        m_hasScanLimit.setSelected(csSettings.hasScanLimit());
+        m_scanLimit.setValue(csSettings.scanLimit());
+
+        m_removeInputColumn.setSelected(csSettings.isRemoveInputColumn());
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    protected void saveSettingsTo(final NodeSettingsWO settings)
-            throws InvalidSettingsException {
+    protected void saveSettingsTo(final NodeSettingsWO settings) throws InvalidSettingsException {
 
         // transfer settings from dialog components into our settings object
-        CellSplitterUserSettings csSettings = new CellSplitterUserSettings();
+        CellSplitter2UserSettings csSettings = new CellSplitter2UserSettings();
 
         csSettings.setColumnName(m_column.getSelectedColumn());
 
         // commit the spinner
         try {
             m_columnNumber.commitEdit();
-            Integer numOfCols =
-                    (Integer)((SpinnerNumberModel)m_columnNumber.getModel())
-                            .getValue();
+            final Integer numOfCols = ((SpinnerNumberModel)m_columnNumber.getModel()).getNumber().intValue();
             csSettings.setNumOfCols(numOfCols);
         } catch (ParseException pe) {
             if (m_columnNumber.isEnabled()) {
@@ -379,7 +389,7 @@ public class CellSplitterNodeDialogPane extends NodeDialogPane {
 
         csSettings.setDelimiter(m_delimiter.getText());
 
-        if (m_quote.getText().length() == 0) {
+        if (m_quote.getText().isEmpty()) {
             csSettings.setQuotePattern(null); // disable quoting
         } else {
             csSettings.setQuotePattern(m_quote.getText());
@@ -393,6 +403,13 @@ public class CellSplitterNodeDialogPane extends NodeDialogPane {
         csSettings.setOutputAsSet(m_outputAsSet.isSelected());
         csSettings.setOutputAsCols(m_outputAsColumns.isSelected());
         csSettings.setTrim(m_trim.isSelected());
+
+        csSettings.setSplitColumnNames(m_splitColumnNames.isSelected());
+
+        csSettings.setHasScanLimit(m_hasScanLimit.isSelected());
+        csSettings.setScanLimit(((SpinnerNumberModel)m_scanLimit.getModel()).getNumber().intValue());
+
+        csSettings.setRemoveInputColumn(m_removeInputColumn.isSelected());
 
         csSettings.saveSettingsTo(settings);
 
