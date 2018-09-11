@@ -99,8 +99,8 @@ public class DeleteCommand extends AbstractKNIMECommand {
      */
     private final ConnectionContainerUI[] m_connections;
 
-    /** A Map from ConnectionTerminiWrapper to the connection UI info **/
-    private final Map<ConnectionTerminiWrapper, ConnectionUIInformation> m_connectionUIInfoMap;
+    /** A Map from ConnectionContainerUI to the connection UI info **/
+    private final Map<ConnectionContainerUI, ConnectionUIInformation> m_connectionUIInfoMap;
 
     /**
      * Number of connections that will be deleted upon execute(). This includes m_connections and all connections
@@ -126,8 +126,12 @@ public class DeleteCommand extends AbstractKNIMECommand {
     }
 
     /**
-     * Creates a new delete command for a set of nodes. Undo will also restore
-     * all connections that were removed as part of this command's execute.
+     * Creates a new delete command for a set of nodes. Undo will also restore all connections that were removed as part
+     * of this command's execute.
+     *
+     * TODO Instances of this class are created several times during a single node replacement; perhaps evaluate making
+     * this less computationally involved given that.
+     *
      * @param editParts Selected nodes and connections and annotations
      * @param manager wfm hosting the nodes.
      */
@@ -194,9 +198,9 @@ public class DeleteCommand extends AbstractKNIMECommand {
 
         m_connections = conSet.toArray(new ConnectionContainerUI[m_connectionCount]);
 
-        HashMap<ConnectionTerminiWrapper, ConnectionUIInformation> uiInfoMap = new HashMap<>();
+        HashMap<ConnectionContainerUI, ConnectionUIInformation> uiInfoMap = new HashMap<>();
         for (final ConnectionContainerUI cc : m_connections) {
-            uiInfoMap.put(new ConnectionTerminiWrapper(cc), cc.getUIInfo());
+            uiInfoMap.put(cc, cc.getUIInfo());
         }
         m_connectionUIInfoMap = Collections.unmodifiableMap(uiInfoMap);
     }
@@ -341,98 +345,9 @@ public class DeleteCommand extends AbstractKNIMECommand {
     }
 
     /**
-     * @return an unmodifiable map, mapping the connection termini (node id + port of source and destination) to the ui
-     *         info for the connection
+     * @return an unmodifiable map, mapping the ConnectionContainerUI to its UI info
      */
-    public Map<ConnectionTerminiWrapper, ConnectionUIInformation> getConnectionUIInfo() {
+    public Map<ConnectionContainerUI, ConnectionUIInformation> getConnectionUIInfo() {
         return m_connectionUIInfoMap;
-    }
-
-
-    /**
-     * I was going to implement hashCode for ConnectionContainerUI, since it doesn't implement its own, which does this
-     * sort of thing but i was then worried what i might be breaking something elsewhere that relied on that class
-     * having a default hashCode implementation. (TODO)
-     *
-     * @author loki der quaeler
-     */
-    static class ConnectionTerminiWrapper {
-        private final NodeID m_sourceNodeId;
-        private final int m_sourcePort;
-
-        private final NodeID m_destinationNodeId;
-        private final int m_destinationPort;
-
-        ConnectionTerminiWrapper (final ConnectionContainerUI cc) {
-            this(cc.getSource(), cc.getSourcePort(), cc.getDest(), cc.getDestPort());
-        }
-
-        ConnectionTerminiWrapper(final NodeID sourceId, final int sourcePort, final NodeID destinationId,
-            final int destinationPort) {
-            m_sourceNodeId = sourceId;
-            m_sourcePort = sourcePort;
-
-            m_destinationNodeId = destinationId;
-            m_destinationPort = destinationPort;
-        }
-
-        /**
-         * {@inheritDoc}
-         */
-        @Override
-        public int hashCode() {
-            final int prime = 31;
-            int result = prime + ((m_destinationNodeId == null) ? 0 : m_destinationNodeId.hashCode());
-
-            result = (prime * result) + m_destinationPort;
-            result = (prime * result) + ((m_sourceNodeId == null) ? 0 : m_sourceNodeId.hashCode());
-
-            return (prime * result) + m_sourcePort;
-        }
-
-        /**
-         * {@inheritDoc}
-         */
-        @Override
-        public boolean equals(final Object obj) {
-            if (this == obj) {
-                return true;
-            }
-
-            if (obj == null) {
-                return false;
-            }
-
-            if (getClass() != obj.getClass()) {
-                return false;
-            }
-
-            final ConnectionTerminiWrapper other = (ConnectionTerminiWrapper)obj;
-            if (m_destinationNodeId == null) {
-                if (other.m_destinationNodeId != null) {
-                    return false;
-                }
-            } else if (!m_destinationNodeId.equals(other.m_destinationNodeId)) {
-                return false;
-            }
-
-            if (m_destinationPort != other.m_destinationPort) {
-                return false;
-            }
-
-            if (m_sourceNodeId == null) {
-                if (other.m_sourceNodeId != null) {
-                    return false;
-                }
-            } else if (!m_sourceNodeId.equals(other.m_sourceNodeId)) {
-                return false;
-            }
-
-            if (m_sourcePort != other.m_sourcePort) {
-                return false;
-            }
-
-            return true;
-        }
     }
 }

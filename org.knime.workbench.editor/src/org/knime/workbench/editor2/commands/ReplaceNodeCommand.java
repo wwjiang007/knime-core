@@ -84,7 +84,6 @@ public class ReplaceNodeCommand extends CreateNodeCommand {
         m_node = nodeToReplace;
         m_root = nodeToReplace.getRoot();
         m_replaceHelper = new ReplaceHelper(manager, Wrapper.unwrapNC(m_node.getNodeContainer()));
-
         // delete command handles undo action (restoring connections and positions)
         m_delete = new DeleteCommand(Collections.singleton(m_node), manager);
     }
