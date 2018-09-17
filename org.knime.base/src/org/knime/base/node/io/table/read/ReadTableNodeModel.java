@@ -110,6 +110,9 @@ public class ReadTableNodeModel extends NodeModel {
     /** The extension of the files to store, \".knime\". */
     public static final String PREFERRED_FILE_EXTENSION = ".table";
 
+    private static final String ERROR_MSG_DATA_BIN_EXCEPTION =
+        "Cannot read file! The file is either not in KNIME table format or corrupted.";
+
     private final SettingsModelString m_fileName = new SettingsModelString(CFG_FILENAME, null);
     private final SettingsModelBoolean m_limitCheckerModel = createLimitCheckerModel();
     private final SettingsModelInteger m_limitSpinnerModel = createLimitSpinnerModel(m_limitCheckerModel);
@@ -259,7 +262,15 @@ public class ReadTableNodeModel extends NodeModel {
                 };
                 in = bcs;
             }
-            return DataContainer.readFromStream(in);
+            try {
+                return DataContainer.readFromStream(in);
+            } catch (IOException e) {
+                final String message = e.getMessage();
+                if (message.equals("No entry data.bin in file")) {
+                    throw new InvalidSettingsException(ERROR_MSG_DATA_BIN_EXCEPTION);
+                }
+                throw e;
+            }
         } finally {
             exec.setProgress(1.0);
         }
@@ -298,6 +309,9 @@ public class ReadTableNodeModel extends NodeModel {
             if (message == null) {
                 message = "Unable to read spec from file, "
                     + "no detailed message available.";
+            }
+            if (message.equals("No entry data.bin in file")) {
+                throw new InvalidSettingsException(ERROR_MSG_DATA_BIN_EXCEPTION);
             }
             throw new InvalidSettingsException(message);
 
