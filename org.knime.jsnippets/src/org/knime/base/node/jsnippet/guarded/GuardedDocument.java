@@ -272,6 +272,16 @@ public class GuardedDocument extends RSyntaxDocument {
         return doAddGuardedSection(name, offset, true);
     }
 
+    /**
+     * Try to remove the guarded section with the given name
+     *
+     * @param name the name of the guarded section
+     * @since 3.7
+     */
+    public void removeGuardedSection(final String name) {
+            m_guards.remove(name);
+    }
+
     /** Add a named guarded section to the document. */
     private GuardedSection doAddGuardedSection(final String name,
             final int offset, final boolean isFooter)
