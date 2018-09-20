@@ -47,7 +47,9 @@ package org.knime.base.node.viz.property.color;
 import java.awt.Color;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -72,16 +74,16 @@ import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeModel;
 import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
+import org.knime.core.node.defaultnodesettings.SettingsModelString;
 import org.knime.core.node.port.PortObject;
 import org.knime.core.node.port.PortObjectSpec;
 import org.knime.core.node.port.PortType;
 import org.knime.core.node.port.viewproperty.ColorHandlerPortObject;
 
 /**
- * Model used to set colors either based on the nominal values or ranges
- * (bounds) retrieved from the {@link org.knime.core.data.DataColumnSpec}.
- * The created {@link org.knime.core.data.property.ColorHandler} is then
- * set in the column spec.
+ * Model used to set colors either based on the nominal values or ranges (bounds) retrieved from the
+ * {@link org.knime.core.data.DataColumnSpec}. The created {@link org.knime.core.data.property.ColorHandler} is then set
+ * in the column spec.
  *
  * @see ColorManager2NodeDialogPane
  *
@@ -91,15 +93,19 @@ class ColorManager2NodeModel extends NodeModel {
 
     /** The selected column. */
     private String m_column;
+
     /** true if color ranges, false for discrete colors. */
     private boolean m_isNominal;
+
     /** Stores the mapping from string column value to color. */
     private final Map<DataCell, ColorAttr> m_map;
 
     /** The selected column. */
     private String m_columnGuess;
+
     /** true if color ranges, false for discrete colors. */
     private boolean m_isNominalGuess;
+
     /** Stores the mapping from string column value to color. */
     private final Map<DataCell, ColorAttr> m_mapGuess;
 
@@ -124,6 +130,7 @@ class ColorManager2NodeModel extends NodeModel {
     /** Type of color setting. */
     static final String IS_NOMINAL = "is_nominal";
 
+    private final SettingsModelString m_paletteSettings = createPaletteSettings();
 
     /** Key for minimum color value. */
     private static final DataCell MIN_VALUE = new StringCell("min_value");
@@ -131,16 +138,29 @@ class ColorManager2NodeModel extends NodeModel {
     /** Key for maximum color value. */
     private static final DataCell MAX_VALUE = new StringCell("max_value");
 
+    /** Settingstrings for the handling of new values **/
+    final static String NEW_VALUES = "new_values";
+    final static String SET1 = "Use Set1";
+    final static String SET2 = "Use Set2";
+    final static String SET3 = "Use Set3";
+    final static String FAIL = "Fail";
+
     /**
-     * Creates a new model for mapping colors. The model has one input and two
-     * outputs.
+     * Creates a new model for mapping colors. The model has one input and two outputs.
      *
      */
     public ColorManager2NodeModel() {
-        super(new PortType[]{BufferedDataTable.TYPE}, new PortType[]{
-                BufferedDataTable.TYPE, ColorHandlerPortObject.TYPE});
+        super(new PortType[]{BufferedDataTable.TYPE},
+            new PortType[]{BufferedDataTable.TYPE, ColorHandlerPortObject.TYPE});
         m_map = new LinkedHashMap<DataCell, ColorAttr>();
         m_mapGuess = new LinkedHashMap<DataCell, ColorAttr>();
+    }
+
+    /**
+     * @return
+     */
+    static SettingsModelString createPaletteSettings() {
+        return new SettingsModelString(NEW_VALUES, ColorManager2NodeModel.SET1);
     }
 
     /**
@@ -148,13 +168,12 @@ class ColorManager2NodeModel extends NodeModel {
      *
      * @param data the input data array
      * @param exec the execution monitor
-     * @return the same input data table whereby the RowKeys contain color info
-     *         now
+     * @return the same input data table whereby the RowKeys contain color info now
      * @throws CanceledExecutionException if user canceled execution
      */
     @Override
-    protected PortObject[] execute(final PortObject[] data,
-            final ExecutionContext exec) throws CanceledExecutionException {
+    protected PortObject[] execute(final PortObject[] data, final ExecutionContext exec)
+        throws CanceledExecutionException {
         assert (data != null && data.length == 1 && data[INPORT] != null);
         BufferedDataTable in = (BufferedDataTable)data[0];
         DataTableSpec inSpec = in.getDataTableSpec();
@@ -162,27 +181,19 @@ class ColorManager2NodeModel extends NodeModel {
         // if no column has been selected, guess first nominal column
         if (m_column == null) {
             // find first nominal column with possible values
-            String column =
-                DataTableSpec.guessNominalClassColumn(inSpec, false);
+            String column = DataTableSpec.guessNominalClassColumn(inSpec, false);
             m_columnGuess = column;
             m_isNominalGuess = true;
-            super.setWarningMessage(
-                    "Selected column \"" + column
-                    + "\" with default nominal color mapping.");
-            Set<DataCell> set =
-                inSpec.getColumnSpec(column).getDomain().getValues();
+            super.setWarningMessage("Selected column \"" + column + "\" with default nominal color mapping.");
+            Set<DataCell> set = inSpec.getColumnSpec(column).getDomain().getValues();
             m_mapGuess.clear();
-            m_mapGuess.putAll(
-                    ColorManager2DialogNominal.createColorMapping(set));
+            m_mapGuess.putAll(ColorManager2DialogNominal.createColorMapping(set, m_paletteSettings.getStringValue()));
             colorHandler = createNominalColorHandler(m_mapGuess);
             DataTableSpec newSpec = getOutSpec(inSpec, column, colorHandler);
-            BufferedDataTable changedSpecTable =
-                exec.createSpecReplacerTable(in, newSpec);
-            DataTableSpec modelSpec =
-                new DataTableSpec(newSpec.getColumnSpec(column));
-            ColorHandlerPortObject viewModel = new ColorHandlerPortObject(
-                    modelSpec, colorHandler.toString()
-                    + " based on column \"" + m_column + "\"");
+            BufferedDataTable changedSpecTable = exec.createSpecReplacerTable(in, newSpec);
+            DataTableSpec modelSpec = new DataTableSpec(newSpec.getColumnSpec(column));
+            ColorHandlerPortObject viewModel = new ColorHandlerPortObject(modelSpec,
+                colorHandler.toString() + " based on column \"" + m_column + "\"");
             return new PortObject[]{changedSpecTable, viewModel};
         }
         // find column index
@@ -190,6 +201,11 @@ class ColorManager2NodeModel extends NodeModel {
         // create new column spec based on color settings
         DataColumnSpec cspec = inSpec.getColumnSpec(m_column);
         if (m_isNominal) {
+            // update possible values
+            ArrayList<DataCell> set = new ArrayList<DataCell>(cspec.getDomain().getValues());
+            set.removeAll(m_map.keySet());
+            // find values that need new color mapping
+            m_map.putAll(ColorManager2DialogNominal.createColorMapping(new HashSet<DataCell>(set), m_map, m_paletteSettings.getStringValue()));
             colorHandler = createNominalColorHandler(m_map);
         } else {
             DataColumnDomain dom = cspec.getDomain();
@@ -198,35 +214,31 @@ class ColorManager2NodeModel extends NodeModel {
                 lower = dom.getLowerBound();
                 upper = dom.getUpperBound();
             } else {
-                Statistics3Table stat = new Statistics3Table(in, false, 0, Collections.<String>emptyList(), exec);
+                Statistics3Table stat = new Statistics3Table(in, false, 0, Collections.<String> emptyList(), exec);
                 lower = stat.getMinCells()[columnIndex];
                 upper = stat.getMaxCells()[columnIndex];
             }
             colorHandler = createRangeColorHandler(lower, upper, m_map);
         }
-        DataTableSpec newSpec =
-            getOutSpec(inSpec, m_column, colorHandler);
-        DataTableSpec modelSpec =
-            new DataTableSpec(newSpec.getColumnSpec(m_column));
-        BufferedDataTable changedSpecTable =
-            exec.createSpecReplacerTable(in, newSpec);
-        ColorHandlerPortObject viewModel = new ColorHandlerPortObject(
-                modelSpec, "Coloring on \"" + m_column + "\"");
+        DataTableSpec newSpec = getOutSpec(inSpec, m_column, colorHandler);
+        DataTableSpec modelSpec = new DataTableSpec(newSpec.getColumnSpec(m_column));
+        BufferedDataTable changedSpecTable = exec.createSpecReplacerTable(in, newSpec);
+        ColorHandlerPortObject viewModel = new ColorHandlerPortObject(modelSpec, "Coloring on \"" + m_column + "\"");
+
         return new PortObject[]{changedSpecTable, viewModel};
     }
 
     /**
-     * Appends the given <code>ColorHandler</code> to the given
-     * <code>DataTableSpec</code> for the given column. If the spec
-     * already contains a ColorHandler, it will be removed and replaced by
-     * the new one.
+     * Appends the given <code>ColorHandler</code> to the given <code>DataTableSpec</code> for the given column. If the
+     * spec already contains a ColorHandler, it will be removed and replaced by the new one.
+     *
      * @param spec to which the ColorHandler is appended
      * @param columnName for this column
      * @param colorHdl ColorHandler
      * @return a new spec with ColorHandler
      */
-    static final DataTableSpec getOutSpec(final DataTableSpec spec,
-            final String columnName, final ColorHandler colorHdl) {
+    static final DataTableSpec getOutSpec(final DataTableSpec spec, final String columnName,
+        final ColorHandler colorHdl) {
         DataColumnSpec[] cspecs = new DataColumnSpec[spec.getNumColumns()];
         for (int i = 0; i < cspecs.length; i++) {
             DataColumnSpec cspec = spec.getColumnSpec(i);
@@ -249,8 +261,7 @@ class ColorManager2NodeModel extends NodeModel {
      * @throws InvalidSettingsException if a column is not available
      */
     @Override
-    protected PortObjectSpec[] configure(final PortObjectSpec[] inSpecs)
-            throws InvalidSettingsException {
+    protected PortObjectSpec[] configure(final PortObjectSpec[] inSpecs) throws InvalidSettingsException {
         DataTableSpec spec = (DataTableSpec)inSpecs[INPORT];
         if (spec == null) {
             throw new InvalidSettingsException("No input");
@@ -260,29 +271,22 @@ class ColorManager2NodeModel extends NodeModel {
             // find first nominal column with possible values
             String column = DataTableSpec.guessNominalClassColumn(spec, false);
             if (column == null) {
-                throw new InvalidSettingsException(
-                    "No column selected and no categorical column available.");
+                throw new InvalidSettingsException("No column selected and no categorical column available.");
             }
             m_columnGuess = column;
             m_isNominalGuess = true;
-            Set<DataCell> set = spec.getColumnSpec(column).
-                    getDomain().getValues();
+            Set<DataCell> set = spec.getColumnSpec(column).getDomain().getValues();
             m_mapGuess.clear();
-            m_mapGuess.putAll(
-                    ColorManager2DialogNominal.createColorMapping(set));
+            m_mapGuess.putAll(ColorManager2DialogNominal.createColorMapping(set, m_paletteSettings.getStringValue()));
             ColorHandler colorHandler = createNominalColorHandler(m_mapGuess);
             DataTableSpec dataSpec = getOutSpec(spec, column, colorHandler);
-            DataTableSpec modelSpec =
-                new DataTableSpec(dataSpec.getColumnSpec(column));
-            super.setWarningMessage(
-                    "Selected column \"" + column
-                    + "\" with default nominal color mapping.");
+            DataTableSpec modelSpec = new DataTableSpec(dataSpec.getColumnSpec(column));
+            super.setWarningMessage("Selected column \"" + column + "\" with default nominal color mapping.");
             return new DataTableSpec[]{dataSpec, modelSpec};
         }
         // check column in spec
         if (!spec.containsName(m_column)) {
-            throw new InvalidSettingsException("Column \"" + m_column
-                    + "\" not found.");
+            throw new InvalidSettingsException("Column \"" + m_column + "\" not found.");
         }
         // get domain
         DataColumnDomain domain = spec.getColumnSpec(m_column).getDomain();
@@ -291,27 +295,25 @@ class ColorManager2NodeModel extends NodeModel {
             // check if all values set are in the domain of the column spec
             Set<DataCell> list = domain.getValues();
             if (list == null) {
-                throw new InvalidSettingsException("Column \"" + m_column + "\""
-                        + " has no nominal values set: "
-                        + "execute predecessor or add Binner.");
+                throw new InvalidSettingsException("Column \"" + m_column + "\"" + " has no nominal values set: "
+                    + "execute predecessor or add Binner.");
             }
             // check if the mapping values and the possible values match
-            if (!m_map.keySet().containsAll(list)) {
-                throw new InvalidSettingsException(
-                       "Color mapping does not match possible values.");
+            // m_map.keySet(): [a, b, c] old values
+            // list: [a, b, c, 1] new values
+            if (m_paletteSettings.getStringValue().equals(FAIL) && !m_map.keySet().containsAll(list)) {
+                throw new InvalidSettingsException("New values for column \"" + m_column
+                    + "\" found with no assigned color. Change the 'On new values' setting.");
             }
         } else { // range
             // check if double column is selected
-            if (!spec.getColumnSpec(m_column).getType()
-                    .isCompatible(DoubleValue.class)) {
-                throw new InvalidSettingsException("Column is not valid for"
-                        + " range color settings: "
-                        + spec.getColumnSpec(m_column).getType());
+            if (!spec.getColumnSpec(m_column).getType().isCompatible(DoubleValue.class)) {
+                throw new InvalidSettingsException(
+                    "Column is not valid for" + " range color settings: " + spec.getColumnSpec(m_column).getType());
             }
             // check map
             if (m_map.size() != 2) {
-                throw new InvalidSettingsException(
-                        "Color settings not yet available.");
+                throw new InvalidSettingsException("Color settings not yet available.");
             }
         }
 
@@ -333,21 +335,20 @@ class ColorManager2NodeModel extends NodeModel {
             colorHandler = createRangeColorHandler(lower, upper, m_map);
         }
         DataTableSpec dataSpec = getOutSpec(spec, m_column, colorHandler);
-        DataTableSpec modelSpec =
-            new DataTableSpec(dataSpec.getColumnSpec(m_column));
+        DataTableSpec modelSpec = new DataTableSpec(dataSpec.getColumnSpec(m_column));
         return new DataTableSpec[]{dataSpec, modelSpec};
     }
 
     /**
      * Load color settings.
+     *
      * @param settings Used to read color settings from.
-     * @throws InvalidSettingsException If a color property with the settings
-     *         is invalid.
+     * @throws InvalidSettingsException If a color property with the settings is invalid.
      */
     @Override
-    protected void loadValidatedSettingsFrom(final NodeSettingsRO settings)
-            throws InvalidSettingsException {
+    protected void loadValidatedSettingsFrom(final NodeSettingsRO settings) throws InvalidSettingsException {
         assert (settings != null);
+        m_paletteSettings.loadSettingsFrom(settings);
         // remove all color mappings
         m_map.clear();
         // read settings and write into the map
@@ -356,11 +357,9 @@ class ColorManager2NodeModel extends NodeModel {
             m_isNominal = settings.getBoolean(IS_NOMINAL);
             // nominal
             if (m_isNominal) {
-                DataCell[] values = settings.getDataCellArray(VALUES,
-                        new DataCell[0]);
+                DataCell[] values = settings.getDataCellArray(VALUES, new DataCell[0]);
                 for (int i = 0; i < values.length; i++) {
-                    m_map.put(values[i], ColorAttr.getInstance(new Color(
-                            settings.getInt(values[i].toString()), true)));
+                    m_map.put(values[i], ColorAttr.getInstance(new Color(settings.getInt(values[i].toString()), true)));
                 }
             } else { // range
                 // lower color
@@ -378,10 +377,12 @@ class ColorManager2NodeModel extends NodeModel {
 
     /**
      * Save color settings.
+     *
      * @param settings Used to write color settings into.
      */
     @Override
     protected void saveSettingsTo(final NodeSettingsWO settings) {
+        m_paletteSettings.saveSettingsTo(settings);
         if (m_column != null) {
             settings.addString(SELECTED_COLUMN, m_column);
             settings.addBoolean(IS_NOMINAL, m_isNominal);
@@ -390,17 +391,14 @@ class ColorManager2NodeModel extends NodeModel {
                 DataCell[] values = new DataCell[m_map.size()];
                 int id = -1;
                 for (DataCell c : m_map.keySet()) {
-                    settings.addInt(c.toString(), m_map.get(c).getColor()
-                            .getRGB());
+                    settings.addInt(c.toString(), m_map.get(c).getColor().getRGB());
                     values[++id] = c;
                 }
                 settings.addDataCellArray(VALUES, values);
             } else { // range
                 assert m_map.size() == 2;
-                settings.addInt(MIN_COLOR, m_map.get(MIN_VALUE).getColor()
-                        .getRGB());
-                settings.addInt(MAX_COLOR, m_map.get(MAX_VALUE).getColor()
-                        .getRGB());
+                settings.addInt(MIN_COLOR, m_map.get(MIN_VALUE).getColor().getRGB());
+                settings.addInt(MAX_COLOR, m_map.get(MAX_VALUE).getColor().getRGB());
             }
         } else {
             if (m_columnGuess != null) {
@@ -410,8 +408,7 @@ class ColorManager2NodeModel extends NodeModel {
                 DataCell[] values = new DataCell[m_mapGuess.size()];
                 int id = -1;
                 for (DataCell c : m_mapGuess.keySet()) {
-                    settings.addInt(c.toString(), m_mapGuess.get(c).getColor()
-                            .getRGB());
+                    settings.addInt(c.toString(), m_mapGuess.get(c).getColor().getRGB());
                     values[++id] = c;
                 }
                 settings.addDataCellArray(VALUES, values);
@@ -422,23 +419,20 @@ class ColorManager2NodeModel extends NodeModel {
     }
 
     /**
-     * Validate the color settings, that are, column name must be available, as
-     * well as, a color model either nominal or range that contains a color
-     * mapping, from each possible value to a color or from min and max
-     * value to color, respectively.
+     * Validate the color settings, that are, column name must be available, as well as, a color model either nominal or
+     * range that contains a color mapping, from each possible value to a color or from min and max value to color,
+     * respectively.
+     *
      * @param settings Color settings to validate.
-     * @throws InvalidSettingsException If a color property read from the
-     *         settings is invalid.
+     * @throws InvalidSettingsException If a color property read from the settings is invalid.
      */
     @Override
-    protected void validateSettings(final NodeSettingsRO settings)
-            throws InvalidSettingsException {
+    protected void validateSettings(final NodeSettingsRO settings) throws InvalidSettingsException {
         String column = settings.getString(SELECTED_COLUMN);
         if (column != null) {
             boolean nominalSelected = settings.getBoolean(IS_NOMINAL);
             if (nominalSelected) {
-                DataCell[] values = settings.getDataCellArray(VALUES,
-                        new DataCell[0]);
+                DataCell[] values = settings.getDataCellArray(VALUES, new DataCell[0]);
                 for (int i = 0; i < values.length; i++) {
                     new Color(settings.getInt(values[i].toString()));
                 }
@@ -449,25 +443,21 @@ class ColorManager2NodeModel extends NodeModel {
         }
     }
 
-    private static final ColorHandler createNominalColorHandler(
-            final Map<DataCell, ColorAttr> map) {
+    private static final ColorHandler createNominalColorHandler(final Map<DataCell, ColorAttr> map) {
         return new ColorHandler(new ColorModelNominal(map));
     }
 
-    private static final ColorHandler createRangeColorHandler(
-            final DataCell lower, final DataCell upper,
-            final Map<DataCell, ColorAttr> map) {
+    private static final ColorHandler createRangeColorHandler(final DataCell lower, final DataCell upper,
+        final Map<DataCell, ColorAttr> map) {
         assert map.size() == 2;
         Color c0 = map.get(MIN_VALUE).getColor();
         Color c1 = map.get(MAX_VALUE).getColor();
         double d0 = Double.NaN;
-        if (lower != null && !lower.isMissing()
-                && lower.getType().isCompatible(DoubleValue.class)) {
+        if (lower != null && !lower.isMissing() && lower.getType().isCompatible(DoubleValue.class)) {
             d0 = ((DoubleValue)lower).getDoubleValue();
         }
         double d1 = Double.NaN;
-        if (upper != null && !upper.isMissing()
-                && upper.getType().isCompatible(DoubleValue.class)) {
+        if (upper != null && !upper.isMissing() && upper.getType().isCompatible(DoubleValue.class)) {
             d1 = ((DoubleValue)upper).getDoubleValue();
         }
         return new ColorHandler(new ColorModelRange(d0, c0, d1, c1));
@@ -482,9 +472,8 @@ class ColorManager2NodeModel extends NodeModel {
      * {@inheritDoc}
      */
     @Override
-    protected void loadInternals(final File nodeInternDir,
-            final ExecutionMonitor exec) throws IOException,
-            CanceledExecutionException {
+    protected void loadInternals(final File nodeInternDir, final ExecutionMonitor exec)
+        throws IOException, CanceledExecutionException {
 
     }
 
@@ -492,9 +481,8 @@ class ColorManager2NodeModel extends NodeModel {
      * {@inheritDoc}
      */
     @Override
-    protected void saveInternals(final File nodeInternDir,
-            final ExecutionMonitor exec) throws IOException,
-            CanceledExecutionException {
+    protected void saveInternals(final File nodeInternDir, final ExecutionMonitor exec)
+        throws IOException, CanceledExecutionException {
 
     }
 

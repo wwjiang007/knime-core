@@ -121,6 +121,7 @@ final class ColorManager2NodeDialogPane extends NodeDialogPane implements ItemLi
     /** Colorblind safe palette, contributed from Color Universal Design, http://jfly.iam.u-tokyo.ac.jp/color/. */
     static final String[] PALETTE_SET3 = {"#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7"};
 
+
     /**
      * Creates a new color manager dialog; all color settings are empty.
      */
@@ -254,13 +255,23 @@ final class ColorManager2NodeDialogPane extends NodeDialogPane implements ItemLi
             LOGGER.debug("Nominal/Range selection flag" + " not available.");
         }
 
+        // get new values setting
+        m_palettesPanel.m_handleNewValues.loadSettingsFrom(settings, specs);
+
         // find last columns for nominal values and numeric ranges defined
         for (int i = 0; i < specs[0].getNumColumns(); i++) {
             DataColumnSpec cspec = specs[0].getColumnSpec(i);
             DataColumnDomain domain = cspec.getDomain();
             // nominal values defined
+            String new_values = null;
+            try {
+                new_values = settings.getString(ColorManager2NodeModel.NEW_VALUES);
+            } catch (InvalidSettingsException e) {
+                LOGGER.debug("New value handling setting not available");
+            }
             if (domain.hasValues()) {
-                m_nominal.add(cspec.getName(), domain.getValues());
+                // add all values to the nominal panel
+                m_nominal.add(cspec.getName(), domain.getValues(), new_values);
                 // select last possible nominal column
                 hasNominals = i;
             }
@@ -361,6 +372,7 @@ final class ColorManager2NodeDialogPane extends NodeDialogPane implements ItemLi
     @Override
     protected void saveSettingsTo(final NodeSettingsWO settings) throws InvalidSettingsException {
         assert (settings != null);
+        m_palettesPanel.m_handleNewValues.saveSettingsTo(settings);
         String cell = getSelectedColumn();
         settings.addString(ColorManager2NodeModel.SELECTED_COLUMN, cell);
         if (cell != null) {
