@@ -121,7 +121,7 @@ class DCObjectOutputVersion2 implements KNIMEStreamConstants, AutoCloseable {
      * @param fileStoreKeys
      * @throws IOException
      */
-    public void writeFileStoreKeys(final FileStoreKey[] fileStoreKeys) throws IOException {
+    void writeFileStoreKeys(final FileStoreKey[] fileStoreKeys) throws IOException {
         m_dataOut.writeInt(fileStoreKeys.length);
         for(FileStoreKey fsKey : fileStoreKeys) {
             fsKey.save(m_dataOut);
