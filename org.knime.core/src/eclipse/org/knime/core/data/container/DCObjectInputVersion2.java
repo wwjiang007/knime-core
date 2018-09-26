@@ -151,12 +151,12 @@ final class DCObjectInputVersion2 implements KNIMEStreamConstants {
      * @throws IOException If IO problems occur.
      */
     FileStoreKey[] readFileStoreKeys() throws IOException {
-        int numReferencedFileStoreKeys = m_dataIn.readInt();
-        FileStoreKey[] referencedFileStoreKeys = new FileStoreKey[numReferencedFileStoreKeys];
-        for(int fsIdx = 0; fsIdx < numReferencedFileStoreKeys; fsIdx++) {
-            referencedFileStoreKeys[fsIdx] = FileStoreKey.load(m_dataIn);
+        int numFileStoreKeys = m_dataIn.readInt();
+        FileStoreKey[] fileStoreKeys = new FileStoreKey[numFileStoreKeys];
+        for(int fsIdx = 0; fsIdx < numFileStoreKeys; fsIdx++) {
+            fileStoreKeys[fsIdx] = FileStoreKey.load(m_dataIn);
         }
-        return referencedFileStoreKeys;
+        return fileStoreKeys;
     }
 
     /** Reads a blob address from the stream.
