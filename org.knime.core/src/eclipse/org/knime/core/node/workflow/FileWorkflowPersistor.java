@@ -143,7 +143,7 @@ public class FileWorkflowPersistor implements WorkflowPersistor, TemplateNodeCon
             V3060Pre("3.6.0Pre"),
             /** Add support for multiple FileStores in FileStoreCell.
              * @since 3.7 */
-            V3070Pre("3.7.0Pre"),
+            V3070("3.7.0"),
             /** Try to be forward compatible.
              * @since 2.8 */
             FUTURE("<future>");
@@ -204,7 +204,7 @@ public class FileWorkflowPersistor implements WorkflowPersistor, TemplateNodeCon
         }
     }
 
-    static final LoadVersion VERSION_LATEST = LoadVersion.V3070Pre;
+    static final LoadVersion VERSION_LATEST = LoadVersion.V3070;
 
     /** Format used to save author/edit infos. */
     static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z");
