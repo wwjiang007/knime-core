@@ -207,7 +207,7 @@ public abstract class FileStoreCell extends DataCell implements FlushCallback {
     /** {@inheritDoc} */
     @Override
     public int hashCode() {
-        return m_fileStoreProxies.hashCode();
+        return Arrays.hashCode(m_fileStoreProxies);
     }
 
 }
