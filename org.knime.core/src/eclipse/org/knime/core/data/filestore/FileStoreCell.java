@@ -49,6 +49,7 @@ package org.knime.core.data.filestore;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.stream.Collectors;
 
 import org.knime.core.data.DataCell;
 import org.knime.core.data.filestore.internal.FileStoreHandlerRepository;
@@ -164,9 +165,7 @@ public abstract class FileStoreCell extends DataCell implements FlushCallback {
     /** {@inheritDoc} */
     @Override
     public String toString() {
-        StringBuilder builder = new StringBuilder();
-        Arrays.stream(m_fileStoreProxies).forEachOrdered(fsp -> builder.append(fsp.toString() + " "));
-        return builder.toString();
+        return Arrays.stream(m_fileStoreProxies).map(Object::toString).collect(Collectors.joining(", "));
     }
 
     /** {@inheritDoc} */
