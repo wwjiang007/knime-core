@@ -106,13 +106,6 @@ public abstract class FileStoreCell extends DataCell implements FlushCallback {
     /**
      * @since 3.7
      */
-    final FileStoreKey getFileStoreKey(final int fileStoreIndex) {
-        return m_fileStoreProxies[fileStoreIndex].getFileStoreKey();
-    }
-
-    /**
-     * @since 3.7
-     */
     final FileStoreKey[] getFileStoreKeys() {
         return Arrays.stream(m_fileStoreProxies).map(FileStoreProxy::getFileStoreKey).toArray(FileStoreKey[]::new);
     }
